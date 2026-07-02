@@ -218,10 +218,24 @@ export interface DimensionMetrics {
   avgTimeToReplyHours: number | null;
 }
 
+export type ContextFactType = "news" | "funding" | "post" | "company" | "web";
+
+export interface ContextFact {
+  id: string;
+  type: ContextFactType;
+  text: string;
+  source: string;
+  url?: string;
+  date?: string;
+  enabled: boolean;
+}
+
 export interface AppSettings {
   anthropicApiKey: string;
   enrichmentProvider: "none" | "apify";
   enrichmentApiToken: string;
+  contextProvider: "none" | "tavily";
+  contextApiToken: string;
   activePersona: OutreachPersona;
   activeTrack: TalentTrack;
   founderVariant: FounderVariant;
@@ -240,6 +254,9 @@ export type MessageRequest = {
   type: "ENRICH_QUEUE";
   force?: boolean;
 } | {
+  type: "FETCH_CONTEXT";
+  profile: ProfileData;
+} | {
   type: "SCORE_PROFILE";
   track: TalentTrack;
   notes?: string;
@@ -254,6 +271,7 @@ export type MessageRequest = {
   founderVariant?: FounderVariant;
   personalStructure?: PersonalStructure;
   touchType?: TouchType;
+  context?: ContextFact[];
 } | {
   type: "PREFILL_COMPOSE";
   text: string;

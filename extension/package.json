@@ -26,6 +26,7 @@
       "https://www.linkedin.com/*",
       "https://api.anthropic.com/*",
       "https://api.apify.com/*",
+      "https://api.tavily.com/*",
       "http://localhost:3456/*"
     ],
     "permissions": [

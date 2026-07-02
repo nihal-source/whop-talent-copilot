@@ -1,4 +1,5 @@
 import type {
+  ContextFact,
   FounderVariant,
   OutreachPersona,
   PersonaConfig,
@@ -61,14 +62,15 @@ WHOP PROOF LIBRARY (use sparingly, only when relevant):
 ${proofLines}
 
 RULES:
-- Never invent facts not in profile or notes
+- Never invent facts. You may ONLY reference facts from PROFILE, NOTES, ALLOWED FACTS, or VERIFIED EXTERNAL CONTEXT (all provided in the user message).
 - Do NOT claim mutual connections, meetings, referrals, or events unless explicitly in NOTES
-- Do NOT invent funding rounds, promotions, or social posts
+- Do NOT invent funding rounds, promotions, or social posts. You MAY reference a funding round, launch, news item, or post ONLY if it appears verbatim in VERIFIED EXTERNAL CONTEXT.
+- When you use an item from VERIFIED EXTERNAL CONTEXT, reference it naturally and accurately — do not exaggerate or add details beyond what the context states.
 - If a detail is missing, use a generic observation or ask a question — do not guess
 - Mirror casual spelling (u, w/, yo) — do not correct to formal English
 - Never blend Personal and Founder voice
 - Only use Whop proof points when persona/variant allows pitching Whop
-- Use ONLY names/companies/schools from ALLOWED FACTS below
+- Use ONLY names/companies/schools from ALLOWED FACTS or VERIFIED EXTERNAL CONTEXT
 
 EXAMPLE INITIAL:
 ${persona.examples.initial}`;
@@ -85,15 +87,29 @@ function formatAllowedFacts(profile: ProfileData, notes: string, allowWhopProof:
 - Whop pitch allowed: ${allowWhopProof ? "yes" : "no — observation only"}`;
 }
 
+function formatExternalContext(context: ContextFact[]): string {
+  const enabled = context.filter((c) => c.enabled && c.text.trim());
+  if (!enabled.length) return "";
+  const lines = enabled
+    .map((c) => {
+      const meta = [c.type, c.date, c.source].filter(Boolean).join(", ");
+      return `- [${meta}] ${c.text}`;
+    })
+    .join("\n");
+  return `\nVERIFIED EXTERNAL CONTEXT (real, sourced — you MAY reference these; do not add details beyond them):
+${lines}\n`;
+}
+
 export function buildUserPrompt(
   profile: ProfileData,
   segment: RecipientSegment,
   notes: string,
   touchType: TouchType,
   topPerformers: string[] = [],
-  opts?: { allowWhopProof?: boolean },
+  opts?: { allowWhopProof?: boolean; context?: ContextFact[] },
 ): string {
   const allowWhopProof = opts?.allowWhopProof ?? true;
+  const externalContext = formatExternalContext(opts?.context ?? []);
   const performers =
     topPerformers.length > 0
       ? `\nTop performing messages for this segment (mirror style, do NOT copy facts from these):\n${topPerformers.join("\n---\n")}`
@@ -107,7 +123,7 @@ export function buildUserPrompt(
   return `Generate outreach for touch type: ${touchType}
 
 ${formatAllowedFacts(profile, notes, allowWhopProof)}
-
+${externalContext}
 PROFILE (scraped — treat as source of truth):
 - Name: ${profile.name} (first: ${profile.firstName}, short: ${profile.shortName})
 - Headline: ${profile.headline || "unknown"}

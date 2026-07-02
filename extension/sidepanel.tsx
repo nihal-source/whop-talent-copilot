@@ -7,6 +7,7 @@ import {
 
 import type {
   AppSettings,
+  ContextFact,
   DraftSet,
   FitTier,
   OutreachRecord,
@@ -195,6 +196,8 @@ function IndexSidepanel() {
   const [queue, setQueue] = useState<SourcingQueueEntry[]>([]);
   const [drafts, setDrafts] = useState<DraftSet | null>(null);
   const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
+  const [context, setContext] = useState<ContextFact[]>([]);
+  const [contextLoading, setContextLoading] = useState(false);
   const [activeRecord, setActiveRecord] = useState<OutreachRecord | null>(null);
   const [outreach, setOutreach] = useState<OutreachRecord[]>([]);
   const [metrics, setMetrics] = useState<DimensionMetrics[]>([]);
@@ -231,9 +234,31 @@ function IndexSidepanel() {
       setProfile(merged);
       setFit(f);
       setSegment(seg);
+      setContext([]);
     },
     [],
   );
+
+  const fetchContext = useCallback(async () => {
+    if (!profile) return;
+    setError("");
+    setContextLoading(true);
+    try {
+      const facts = await send<ContextFact[]>({ type: "FETCH_CONTEXT", profile });
+      setContext(facts);
+      if (facts.length === 0) {
+        setError("No context found for this profile. Try adding company/title, or proceed without it.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setContextLoading(false);
+    }
+  }, [profile]);
+
+  const toggleContext = useCallback((id: string) => {
+    setContext((prev) => prev.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)));
+  }, []);
 
   const refreshProfile = useCallback(async () => {
     setError("");
@@ -362,6 +387,7 @@ function IndexSidepanel() {
         segment,
         founderVariant: settings.founderVariant,
         personalStructure: settings.personalStructure,
+        context,
       });
       setDrafts(data.drafts);
       setEditDraft(data.drafts);
@@ -611,6 +637,50 @@ function IndexSidepanel() {
             Notes (signals scrape missed — IOI gold, President&apos;s Club, etc.)
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </label>
+          {settings && settings.contextProvider !== "none" && profile && (
+            <div className="card">
+              <div className="card-title">
+                Live context
+                <button className="btn secondary" onClick={fetchContext} disabled={contextLoading}>
+                  {contextLoading ? "Fetching…" : context.length ? "Refresh" : "Fetch context"}
+                </button>
+              </div>
+              {context.length === 0 ? (
+                <p className="muted">
+                  Pull recent news, funding, and posts. Review each item — only checked facts are
+                  given to the model.
+                </p>
+              ) : (
+                <ul className="context-list">
+                  {context.map((c) => (
+                    <li key={c.id} className={c.enabled ? "ctx on" : "ctx off"}>
+                      <label className="ctx-row">
+                        <input
+                          type="checkbox"
+                          checked={c.enabled}
+                          onChange={() => toggleContext(c.id)}
+                        />
+                        <span>
+                          <span className="ctx-meta">
+                            {c.type}
+                            {c.date ? ` · ${c.date}` : ""} ·{" "}
+                            {c.url ? (
+                              <a href={c.url} target="_blank" rel="noreferrer">
+                                {c.source}
+                              </a>
+                            ) : (
+                              c.source
+                            )}
+                          </span>
+                          <span className="ctx-text">{c.text}</span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <div className="actions">
             <button className="btn secondary" onClick={addToQueue} disabled={!fit}>
               Add to Queue

@@ -231,6 +231,57 @@ label {
   opacity: 0.5;
 }
 
+.context-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.context-list .ctx {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fff;
+}
+
+.context-list .ctx.off {
+  opacity: 0.5;
+}
+
+.ctx-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+  margin: 0;
+}
+
+.ctx-row input {
+  margin-top: 2px;
+}
+
+.ctx-meta {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.ctx-meta a {
+  color: #3b82f6;
+}
+
+.ctx-text {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .footer {
   margin-top: 16px;
   text-align: center;

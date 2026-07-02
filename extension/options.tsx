@@ -103,6 +103,42 @@ function OptionsPage() {
               </p>
             </>
           )}
+
+          <label>
+            Context Provider (news / posts)
+            <select
+              value={settings.contextProvider}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  contextProvider: e.target.value as AppSettings["contextProvider"],
+                })
+              }
+            >
+              <option value="none">None</option>
+              <option value="tavily">Tavily — web + news search</option>
+            </select>
+          </label>
+          <p className="hint">
+            Optional. Pulls timely, sourced facts (company news, funding, launches, the person's
+            posts) that you review before they're fed to the model as allowed context.
+          </p>
+
+          {settings.contextProvider === "tavily" && (
+            <>
+              <label>
+                Tavily API Token
+                <input
+                  type="password"
+                  value={settings.contextApiToken}
+                  onChange={(e) => setSettings({ ...settings, contextApiToken: e.target.value })}
+                />
+              </label>
+              <p className="hint">
+                Free tier available. Get a key at app.tavily.com → API Keys (format: tvly-…).
+              </p>
+            </>
+          )}
         </section>
       )}
 

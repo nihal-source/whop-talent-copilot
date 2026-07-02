@@ -8,12 +8,14 @@ import {
   callAnthropic,
   enrichProfile,
   extractMessageFeatures,
+  fetchProfileContext,
   isProfileReadyForGeneration,
   levenshtein,
   sanitizeSentText,
   scoreProfile,
   validateDraftSet,
   type AppSettings,
+  type ContextFact,
   type OutreachEvent,
   type OutreachPersona,
   type OutreachRecord,
@@ -30,6 +32,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: "",
   enrichmentProvider: "none",
   enrichmentApiToken: "",
+  contextProvider: "none",
+  contextApiToken: "",
   activePersona: "personal",
   activeTrack: "engineering",
   founderVariant: "founder_subtle_career",
@@ -197,6 +201,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         }
 
+        case "FETCH_CONTEXT": {
+          if (settings.contextProvider === "none") {
+            sendResponse({ ok: false, error: "No context provider configured in Options" });
+            break;
+          }
+          const profile = msg.profile as ProfileData;
+          const facts = await fetchProfileContext(
+            settings.contextProvider,
+            settings.contextApiToken,
+            profile,
+          );
+          sendResponse({ ok: true, data: facts });
+          break;
+        }
+
         case "SCORE_PROFILE": {
           const profile = msg.profile as ProfileData;
           const fit = scoreProfile(profile, msg.track, settings.talentBar, msg.notes ?? "");
@@ -254,14 +273,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             founderVariant,
             msg.personalStructure ?? settings.personalStructure,
           );
+          const context = (msg.context as ContextFact[] | undefined) ?? [];
           const user = buildUserPrompt(profile, segment, msg.notes ?? "", "initial", topPerformers, {
             allowWhopProof,
+            context,
           });
           const drafts = await callAnthropic(settings.anthropicApiKey, system, user);
 
           const validation = validateDraftSet(drafts, profile, msg.notes ?? "", {
             personaIsFounder: msg.persona === "founder",
             founderVariant,
+            context,
           });
           if (!validation.valid) {
             sendResponse({ ok: false, error: validation.errors.join("; ") });

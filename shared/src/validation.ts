@@ -1,4 +1,4 @@
-import type { DraftSet, ProfileData } from "./types";
+import type { ContextFact, DraftSet, ProfileData } from "./types";
 import { NAME_SHORTENINGS } from "./defaults";
 
 export const MESSAGE_WORD_MIN = 50;
@@ -17,6 +17,8 @@ export interface AllowedFacts {
   headlinePhrases: string[];
   notePhrases: string[];
   whopProofAllowed: boolean;
+  /** Lowercased concatenation of enabled external context — grounds news/funding/company claims. */
+  contextCorpus: string;
 }
 
 function tokenize(text: string): string[] {
@@ -67,7 +69,12 @@ export function isProfileReadyForGeneration(profile: ProfileData): { ok: boolean
   return { ok: true };
 }
 
-export function buildAllowedFacts(profile: ProfileData, notes: string, allowWhopProof = true): AllowedFacts {
+export function buildAllowedFacts(
+  profile: ProfileData,
+  notes: string,
+  allowWhopProof = true,
+  context: ContextFact[] = [],
+): AllowedFacts {
   const names = new Set<string>();
   if (profile.name) names.add(profile.name.toLowerCase());
   if (profile.firstName) names.add(profile.firstName.toLowerCase());
@@ -97,6 +104,11 @@ export function buildAllowedFacts(profile: ProfileData, notes: string, allowWhop
     .map((s) => s.trim().toLowerCase())
     .filter((s) => s.length >= 3);
 
+  const contextCorpus = context
+    .filter((c) => c.enabled)
+    .map((c) => c.text.toLowerCase())
+    .join(" \n ");
+
   return {
     names: [...names],
     companies: [...companies],
@@ -105,6 +117,7 @@ export function buildAllowedFacts(profile: ProfileData, notes: string, allowWhop
     headlinePhrases,
     notePhrases,
     whopProofAllowed: allowWhopProof,
+    contextCorpus,
   };
 }
 
@@ -125,11 +138,17 @@ export function matchesCompanyStrict(company: string, list: string[]): boolean {
   });
 }
 
-const SUSPICIOUS_CLAIM_PATTERNS = [
+// Always suspicious — these claim a personal/social relationship that no data source can verify.
+const ALWAYS_SUSPICIOUS_PATTERNS = [
   /\b(mutual|we met|referred by|your friend)\b/i,
   /\b(i saw you at|met you at|ran into you)\b/i,
-  /\b(congrats on (the )?(raise|funding|acquisition))\b/i,
+];
+
+// Suspicious only if NOT substantiated by verified external context (news/funding/posts).
+const CONTEXT_DEPENDENT_PATTERNS = [
+  /\b(congrats on (the )?(raise|funding|acquisition|launch|round))\b/i,
   /\b(your (recent )?post about)\b/i,
+  /\b(saw (the )?news|read that|just launched|recently raised)\b/i,
 ];
 
 export interface DraftValidationResult {
@@ -148,7 +167,9 @@ function mentionsUnknownCompany(text: string, allowed: AllowedFacts): string[] {
     const known = allowed.companies.some(
       (c) => c.includes(mentioned) || mentioned.includes(c.split(/\s+/)[0] ?? ""),
     );
-    if (!known && mentioned.length > 3) {
+    // A company named in verified external context is legitimate to reference.
+    const inContext = allowed.contextCorpus.includes(mentioned);
+    if (!known && !inContext && mentioned.length > 3) {
       issues.push(`May reference unverified company: "${m[1].trim()}"`);
     }
   }
@@ -159,11 +180,13 @@ export function validateDraftSet(
   drafts: DraftSet,
   profile: ProfileData,
   notes: string,
-  opts?: { personaIsFounder?: boolean; founderVariant?: string },
+  opts?: { personaIsFounder?: boolean; founderVariant?: string; context?: ContextFact[] },
 ): DraftValidationResult {
   const warnings: string[] = [];
   const errors: string[] = [];
-  const allowed = buildAllowedFacts(profile, notes, opts?.founderVariant === "founder_direct");
+  const context = opts?.context ?? [];
+  const allowed = buildAllowedFacts(profile, notes, opts?.founderVariant === "founder_direct", context);
+  const hasEnabledContext = context.some((c) => c.enabled && c.text.trim());
 
   for (const [key, text] of Object.entries(drafts) as [string, string][]) {
     if (!text?.trim()) {
@@ -171,10 +194,20 @@ export function validateDraftSet(
       continue;
     }
 
-    for (const pat of SUSPICIOUS_CLAIM_PATTERNS) {
+    for (const pat of ALWAYS_SUSPICIOUS_PATTERNS) {
       if (pat.test(text)) {
-        warnings.push(`${key}: possible invented social context — review before sending`);
+        warnings.push(`${key}: claims a personal/social connection that can't be verified — review before sending`);
         break;
+      }
+    }
+
+    // News/funding/post references are only OK when grounded in verified external context.
+    if (!hasEnabledContext) {
+      for (const pat of CONTEXT_DEPENDENT_PATTERNS) {
+        if (pat.test(text)) {
+          warnings.push(`${key}: references news/funding/a post but no verified context was provided — confirm it's real before sending`);
+          break;
+        }
       }
     }
 
