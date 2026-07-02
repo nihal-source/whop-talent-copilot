@@ -1,0 +1,14 @@
+{
+  "name": "whop-talent-copilot",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "extension",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w extension",
+    "build": "npm run build -w extension && npm run build -w server",
+    "dev:server": "npm run dev -w server"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "extends": "plasmo/templates/tsconfig.base",
+  "compilerOptions": {
+    "paths": {
+      "~*": ["./*"],
+      "@whop-copilot/shared": ["../shared/src"],
+      "@whop-copilot/shared/*": ["../shared/src/*"]
+    },
+    "baseUrl": ".",
+    "strict": true
+  },
+  "include": [".plasmo/index.d.ts", "./**/*.ts", "./**/*.tsx"]
+}

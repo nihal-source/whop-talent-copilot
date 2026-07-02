@@ -1,0 +1,42 @@
+{
+  "name": "whop-talent-copilot-extension",
+  "displayName": "Whop Talent Co-pilot",
+  "version": "1.0.0",
+  "description": "Whop recruiting — talent bar sourcing, outreach drafts, and conversion analytics",
+  "author": "Whop",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package"
+  },
+  "dependencies": {
+    "@whop-copilot/shared": "file:../shared",
+    "plasmo": "^0.90.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.5"
+  },
+  "manifest": {
+    "host_permissions": [
+      "https://www.linkedin.com/*",
+      "https://api.anthropic.com/*",
+      "https://api.apify.com/*",
+      "http://localhost:3456/*"
+    ],
+    "permissions": [
+      "storage",
+      "activeTab",
+      "sidePanel",
+      "scripting",
+      "tabs"
+    ],
+    "side_panel": {
+      "default_path": "sidepanel.html"
+    }
+  }
+}
