@@ -27,7 +27,11 @@
       "https://api.anthropic.com/*",
       "https://api.apify.com/*",
       "https://api.tavily.com/*",
-      "http://localhost:3456/*"
+      "http://localhost:3456/*",
+      "http://localhost:3000/*"
+    ],
+    "optional_host_permissions": [
+      "https://*/*"
     ],
     "permissions": [
       "storage",

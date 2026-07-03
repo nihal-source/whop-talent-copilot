@@ -296,3 +296,103 @@ h3 {
   font-size: 13px;
   margin: 12px 0 4px;
 }
+
+.btn.ghost {
+  background: transparent;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.intro-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.intro-config {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.intro-note {
+  background: #ecfdf5;
+  color: #047857;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.intro-lookup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.intro-target {
+  display: flex;
+  flex-direction: column;
+}
+
+.intro-results {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intro-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+}
+
+.intro-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.intro-badge {
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.intro-badge.confirmed {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.intro-badge.likely {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.intro-score {
+  font-size: 16px;
+  font-weight: 700;
+  color: #4f46e5;
+}
+
+.intro-evidence {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.intro-evidence li {
+  margin: 2px 0;
+}

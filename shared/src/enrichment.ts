@@ -1,13 +1,14 @@
+import { pdlEnrichPerson, type PdlPersonRecord } from "./graph/pdl";
 import type { EducationEntry, ExperienceEntry, ProfileData } from "./types";
 import { shortNameFromFirst } from "./validation";
 
 /**
  * Pluggable profile-data providers. "dom" scrapes the open LinkedIn tab (free, live).
  * "apify" calls a real-time, no-cookie LinkedIn enricher (URL -> structured JSON).
- * Add more real-time scrapers (ScrapIn, Scrapingdog, Bright Data) by implementing a
- * normalizer + fetch and mapping into ProfileData.
+ * "pdl" resolves identity via People Data Labs (consent-based; used for warm-intro
+ * target lookup). Add more providers by implementing a normalizer + fetch.
  */
-export type EnrichmentProvider = "none" | "apify";
+export type EnrichmentProvider = "none" | "apify" | "pdl";
 
 function yearFrom(dateStr?: string | null): number | undefined {
   if (!dateStr) return undefined;
@@ -124,6 +125,43 @@ export async function enrichViaApify(apiToken: string, profileUrl: string): Prom
   return normalizeApifyProfile(raw, profileUrl);
 }
 
+/** Map a People Data Labs person record into the ProfileData shape. */
+export function normalizePdlProfile(rec: PdlPersonRecord, fallbackUrl: string): ProfileData {
+  const fullName =
+    rec.full_name || [rec.first_name, rec.last_name].filter(Boolean).join(" ") || "Unknown";
+  const firstName = rec.first_name || fullName.split(/\s+/)[0] || fullName;
+
+  const experience: ExperienceEntry[] = (rec.experience ?? []).map((e) => ({
+    company: e.company?.name || "",
+    title: e.title?.name || "",
+    startDate: e.start_date ?? undefined,
+    endDate: e.end_date ?? undefined,
+    isCurrent: !e.end_date,
+  }));
+
+  return {
+    linkedinUrl: rec.linkedin_url || fallbackUrl,
+    name: fullName,
+    firstName,
+    shortName: shortNameFromFirst(firstName),
+    headline: rec.job_title || "",
+    currentCompany: rec.job_company_name || experience.find((e) => e.isCurrent)?.company || "",
+    currentTitle: rec.job_title || experience.find((e) => e.isCurrent)?.title || "",
+    location: rec.location_name || "",
+    about: "",
+    education: [],
+    experience,
+    scrapeHealth: fullName !== "Unknown" ? (experience.length ? "full" : "partial") : "failed",
+  };
+}
+
+export async function enrichViaPdl(apiKey: string, profileUrl: string): Promise<ProfileData> {
+  const isUrl = /linkedin\.com\/in\//i.test(profileUrl);
+  const match = await pdlEnrichPerson(apiKey, isUrl ? { linkedinUrl: profileUrl } : { name: profileUrl });
+  if (!match) throw new Error("People Data Labs found no confident match");
+  return normalizePdlProfile(match.record, profileUrl);
+}
+
 export async function enrichProfile(
   provider: EnrichmentProvider,
   apiToken: string,
@@ -132,6 +170,8 @@ export async function enrichProfile(
   switch (provider) {
     case "apify":
       return enrichViaApify(apiToken, profileUrl);
+    case "pdl":
+      return enrichViaPdl(apiToken, profileUrl);
     default:
       throw new Error("No enrichment provider configured");
   }

@@ -22,9 +22,10 @@ import type {
 } from "@whop-copilot/shared";
 import { mergeProfileWithOverrides, segmentLabel, shortNameFromFirst } from "@whop-copilot/shared";
 
+import { IntroPaths } from "./intro-paths";
 import "./sidepanel.css";
 
-type Tab = "sourcing" | "outreach" | "queue" | "pipeline" | "metrics";
+type Tab = "sourcing" | "outreach" | "queue" | "pipeline" | "metrics" | "intro";
 
 const DISCLAIMER_KEY = "tos_disclaimer_accepted";
 
@@ -504,7 +505,7 @@ function IndexSidepanel() {
       </header>
 
       <nav className="tabs">
-        {(["sourcing", "outreach", "queue", "pipeline", "metrics"] as Tab[]).map((t) => (
+        {(["sourcing", "outreach", "queue", "pipeline", "metrics", "intro"] as Tab[]).map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
             {t}
             {t === "pipeline" && dueToday.length > 0 ? ` (${dueToday.length})` : ""}
@@ -879,6 +880,8 @@ function IndexSidepanel() {
           {metrics.length === 0 && <p className="muted">No sends logged yet. Mark messages as sent to build metrics.</p>}
         </section>
       )}
+
+      {tab === "intro" && <IntroPaths profile={profile} />}
 
       <footer className="footer">
         <a href="#" onClick={(e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); }}>
