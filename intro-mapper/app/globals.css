@@ -583,6 +583,30 @@ tbody tr:hover td {
   min-width: 42px;
   text-align: right;
 }
+.signals-section {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 2px;
+}
+.signals-toggle {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: none;
+  padding: 4px 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: none;
+}
+.signals-toggle:hover:not(:disabled) {
+  background: transparent;
+  color: var(--accent);
+  transform: none;
+}
+
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;

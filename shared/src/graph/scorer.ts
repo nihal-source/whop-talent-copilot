@@ -51,6 +51,54 @@ export function normalizeWeights(input: Partial<RubricWeights> | undefined): Rub
   return out;
 }
 
+/**
+ * Relative importance of each interaction signal when computing how close a
+ * connector is to the target. These are multipliers on a 0-1 scale (1 = "as
+ * strong a signal as we model"), not a probability distribution — they do not
+ * need to sum to anything. `follow` scales the weight of a follow-type edge
+ * (X/IG following); the rest scale discrete interaction evidence.
+ */
+export interface SignalWeights {
+  comment: number;
+  reply: number;
+  message: number;
+  repost: number;
+  like: number;
+  /** How much a follow (X/IG) counts relative to a mutual connection. */
+  follow: number;
+}
+
+export const DEFAULT_SIGNAL_WEIGHTS: SignalWeights = {
+  comment: 1,
+  reply: 0.9,
+  message: 1,
+  repost: 0.6,
+  like: 0.3,
+  follow: 0.5,
+};
+
+export const SIGNAL_KEYS: (keyof SignalWeights)[] = [
+  "comment",
+  "reply",
+  "message",
+  "repost",
+  "like",
+  "follow",
+];
+
+/** Clamp each signal weight into [0,1]; missing keys fall back to defaults. */
+export function normalizeSignalWeights(input: Partial<SignalWeights> | undefined): SignalWeights {
+  if (!input) return { ...DEFAULT_SIGNAL_WEIGHTS };
+  const out = {} as SignalWeights;
+  for (const k of SIGNAL_KEYS) {
+    const raw = input[k];
+    out[k] = raw == null || Number.isNaN(Number(raw))
+      ? DEFAULT_SIGNAL_WEIGHTS[k]
+      : Math.min(1, Math.max(0, Number(raw)));
+  }
+  return out;
+}
+
 export interface ScoringContext {
   /** Person IDs of the people you work with (contributors to the graph). */
   teamMemberIds: Set<string>;
@@ -58,6 +106,8 @@ export interface ScoringContext {
   optedInIds?: Set<string>;
   /** Past intro success rate per connector, 0-1. */
   responsivenessById?: Map<string, number>;
+  /** Relative weights for interaction signals feeding closenessToTarget. */
+  signalWeights?: SignalWeights;
   /** Manual credibility ratings, 1-5, per connector. */
   credibilityRatingById?: Map<string, number>;
   weights?: RubricWeights;
@@ -107,20 +157,63 @@ function freshnessFactor(edge: Edge, ttlDays: number, now: Date): number {
   return Math.max(0.5, 1 - over * 0.5);
 }
 
-/** Closeness of connector to target: edge type + confidence + interaction density. */
-function scoreClosenessToTarget(edge: Edge, ttlDays: number, now: Date): number {
+/** Recency multiplier for a single timestamped signal (1 fresh -> 0.5 stale). */
+function recencyFactor(iso: string | undefined, ttlDays: number, now: Date): number {
+  if (!iso) return 1;
+  const age = daysBetween(now, new Date(iso));
+  if (Number.isNaN(age)) return 1;
+  if (age <= ttlDays) return 1;
+  const over = (age - ttlDays) / ttlDays;
+  return Math.max(0.5, 1 - over * 0.5);
+}
+
+const INTERACTION_BOOST_CAP = 0.4;
+const BREADTH_BONUS_PER_PLATFORM = 0.05;
+const BREADTH_BONUS_CAP = 0.1;
+
+/**
+ * Closeness of connector to target. Combines three bounded parts:
+ *  - base tie: the edge existing (type + confidence), decayed by edge freshness;
+ *  - interaction boost: per-signal weighted, per-signal recency-decayed evidence
+ *    passed through a saturating curve so a burst of cheap signals (e.g. likes)
+ *    can't dominate a genuine relationship;
+ *  - breadth bonus: a small lift for engaging across multiple platforms.
+ * Interactions can lift a tie but never manufacture one — the whole thing is
+ * capped at 1.
+ */
+function scoreClosenessToTarget(
+  edge: Edge,
+  sw: SignalWeights,
+  ttlDays: number,
+  now: Date,
+): number {
   const typeWeight =
     edge.type === "connection"
       ? 1
       : edge.type === "follows" || edge.type === "followed_by"
-        ? 0.75
+        ? 0.5 + 0.5 * sw.follow
         : edge.type === "coworker_inferred"
           ? 0.4
           : 0.6;
-  const interactions = edge.evidence.filter((e) => e.kind !== "shared_employer").length;
-  const interactionBoost = Math.min(interactions * 0.08, 0.3);
-  const base = edge.confidence * typeWeight + interactionBoost;
-  return Math.min(base, 1) * freshnessFactor(edge, ttlDays, now);
+
+  const base = edge.confidence * typeWeight * freshnessFactor(edge, ttlDays, now);
+
+  let mass = 0;
+  const platforms = new Set<string>();
+  for (const e of edge.evidence) {
+    if (e.kind === "shared_employer") continue;
+    const w = (sw as unknown as Record<string, number>)[e.kind];
+    if (w == null) continue;
+    mass += w * recencyFactor(e.timestamp, ttlDays, now);
+    platforms.add(e.platform);
+  }
+  const interactionBoost = INTERACTION_BOOST_CAP * (1 - Math.exp(-mass));
+  const breadthBonus = Math.min(
+    Math.max(platforms.size - 1, 0) * BREADTH_BONUS_PER_PLATFORM,
+    BREADTH_BONUS_CAP,
+  );
+
+  return Math.min(base + interactionBoost + breadthBonus, 1);
 }
 
 /** Credibility of the connector as a referrer for this target. */
@@ -225,6 +318,7 @@ export function rankIntroPaths(
   const target = graph.getPerson(targetId);
   if (!target) return [];
   const weights = ctx.weights ?? DEFAULT_WEIGHTS;
+  const signalWeights = ctx.signalWeights ?? DEFAULT_SIGNAL_WEIGHTS;
   const ttlDays = ctx.freshnessTtlDays ?? 90;
   const now = ctx.now ?? new Date();
   const minScore = ctx.minScore ?? 25;
@@ -251,7 +345,7 @@ export function rankIntroPaths(
     }
     const viaTeamMemberId = connectorIsTeam ? connectorId : teamToConnector!.fromPersonId;
 
-    const closenessToTarget = scoreClosenessToTarget(connectorToTarget, ttlDays, now);
+    const closenessToTarget = scoreClosenessToTarget(connectorToTarget, signalWeights, ttlDays, now);
     const credibility = scoreCredibility(
       connector,
       target,

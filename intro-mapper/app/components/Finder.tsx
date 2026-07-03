@@ -6,8 +6,11 @@ import { IntroMap } from "./IntroMap";
 import {
   WeightControls,
   DEFAULT_WEIGHT_STATE,
+  DEFAULT_SIGNAL_STATE,
   loadStoredWeights,
+  loadStoredSignals,
   type WeightState,
+  type SignalState,
 } from "./WeightControls";
 
 interface TargetResponse {
@@ -40,15 +43,17 @@ export function Finder() {
   const [error, setError] = useState<string | null>(null);
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
   const [weights, setWeights] = useState<WeightState>(DEFAULT_WEIGHT_STATE);
+  const [signals, setSignals] = useState<SignalState>(DEFAULT_SIGNAL_STATE);
   const lastQuery = useRef<Query | null>(null);
 
   // Load persisted weights after mount (avoids SSR hydration mismatch).
   useEffect(() => {
     setWeights(loadStoredWeights());
+    setSignals(loadStoredSignals());
   }, []);
 
   const runSearch = useCallback(
-    async (query: Query, w: WeightState, mode: "search" | "rerank") => {
+    async (query: Query, w: WeightState, s: SignalState, mode: "search" | "rerank") => {
       if (mode === "search") {
         setBusy(true);
         setError(null);
@@ -57,10 +62,13 @@ export function Finder() {
         setReranking(true);
       }
       try {
+        const signalWeights = Object.fromEntries(
+          Object.entries(s).map(([k, v]) => [k, v / 100]),
+        );
         const res = await fetch("/api/target", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...query, weights: w }),
+          body: JSON.stringify({ ...query, weights: w, signalWeights }),
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -82,18 +90,18 @@ export function Finder() {
 
   function search(e: React.FormEvent) {
     e.preventDefault();
-    runSearch({ name, company, linkedinUrl }, weights, "search");
+    runSearch({ name, company, linkedinUrl }, weights, signals, "search");
   }
 
-  // Live re-rank when weights change and we already have a result.
+  // Live re-rank when weights or signal weights change and we already have a result.
   useEffect(() => {
     if (!lastQuery.current) return;
     const q = lastQuery.current;
     const t = setTimeout(() => {
-      runSearch(q, weights, "rerank");
+      runSearch(q, weights, signals, "rerank");
     }, 350);
     return () => clearTimeout(t);
-  }, [weights, runSearch]);
+  }, [weights, signals, runSearch]);
 
   return (
     <div className="stack">
@@ -131,7 +139,12 @@ export function Finder() {
         </div>
       </form>
 
-      <WeightControls weights={weights} onChange={setWeights} />
+      <WeightControls
+        weights={weights}
+        onChange={setWeights}
+        signals={signals}
+        onSignalsChange={setSignals}
+      />
 
       {error && <div className="notice danger">{error}</div>}
 
