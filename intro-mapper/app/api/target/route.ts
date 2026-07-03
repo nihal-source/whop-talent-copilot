@@ -3,6 +3,7 @@ import { resolveSession } from "@/lib/auth";
 import { resolveTarget } from "@/lib/target-service";
 import { rankPathsForTarget } from "@/lib/graph-service";
 import { preflight, withCors } from "@/lib/cors";
+import { normalizeWeights, type RubricWeights } from "@/lib/shared";
 
 export function OPTIONS(req: Request) {
   return preflight(req);
@@ -18,17 +19,21 @@ export async function POST(req: Request) {
   if (!session) return withCors(req, NextResponse.json({ error: "unauthenticated" }, { status: 401 }));
 
   const body = await req.json().catch(() => ({}));
-  const { name, company, linkedinUrl } = body as {
+  const { name, company, linkedinUrl, weights } = body as {
     name?: string;
     company?: string;
     linkedinUrl?: string;
+    weights?: Partial<RubricWeights>;
   };
   if (!name?.trim() && !linkedinUrl?.trim()) {
     return withCors(req, NextResponse.json({ error: "provide a name or LinkedIn URL" }, { status: 400 }));
   }
 
+  const normalizedWeights = normalizeWeights(weights);
   const resolved = await resolveTarget(session, { name, company, linkedinUrl });
-  const ranked = await rankPathsForTarget(session.org.id, resolved.person.id);
+  const ranked = await rankPathsForTarget(session.org.id, resolved.person.id, {
+    weights: normalizedWeights,
+  });
 
   return withCors(
     req,
@@ -39,6 +44,7 @@ export async function POST(req: Request) {
       alternatives: resolved.alternatives ?? [],
       paths: ranked.paths,
       names: ranked.names,
+      weights: normalizedWeights,
     }),
   );
 }

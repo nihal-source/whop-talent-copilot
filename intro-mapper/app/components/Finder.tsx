@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { IntroPath, Person } from "@/lib/shared";
 import { IntroMap } from "./IntroMap";
+import {
+  WeightControls,
+  DEFAULT_WEIGHT_STATE,
+  loadStoredWeights,
+  type WeightState,
+} from "./WeightControls";
 
 interface TargetResponse {
   target: Person;
@@ -18,37 +24,76 @@ interface IntroResponse {
   validation: { valid: boolean; warnings: string[]; errors: string[] };
 }
 
+interface Query {
+  name: string;
+  company: string;
+  linkedinUrl: string;
+}
+
 export function Finder() {
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reranking, setReranking] = useState(false);
   const [result, setResult] = useState<TargetResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
+  const [weights, setWeights] = useState<WeightState>(DEFAULT_WEIGHT_STATE);
+  const lastQuery = useRef<Query | null>(null);
 
-  async function search(e: React.FormEvent) {
+  // Load persisted weights after mount (avoids SSR hydration mismatch).
+  useEffect(() => {
+    setWeights(loadStoredWeights());
+  }, []);
+
+  const runSearch = useCallback(
+    async (query: Query, w: WeightState, mode: "search" | "rerank") => {
+      if (mode === "search") {
+        setBusy(true);
+        setError(null);
+        setResult(null);
+      } else {
+        setReranking(true);
+      }
+      try {
+        const res = await fetch("/api/target", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...query, weights: w }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(body.error ?? "Search failed");
+          return;
+        }
+        const map = new Map<string, string>(Object.entries(body.names ?? {}));
+        map.set(body.target.id, body.target.name);
+        setNameById(map);
+        setResult(body);
+        lastQuery.current = query;
+      } finally {
+        setBusy(false);
+        setReranking(false);
+      }
+    },
+    [],
+  );
+
+  function search(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    const res = await fetch("/api/target", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, company, linkedinUrl }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(body.error ?? "Search failed");
-      setBusy(false);
-      return;
-    }
-    const map = new Map<string, string>(Object.entries(body.names ?? {}));
-    map.set(body.target.id, body.target.name);
-    setNameById(map);
-    setResult(body);
-    setBusy(false);
+    runSearch({ name, company, linkedinUrl }, weights, "search");
   }
+
+  // Live re-rank when weights change and we already have a result.
+  useEffect(() => {
+    if (!lastQuery.current) return;
+    const q = lastQuery.current;
+    const t = setTimeout(() => {
+      runSearch(q, weights, "rerank");
+    }, 350);
+    return () => clearTimeout(t);
+  }, [weights, runSearch]);
 
   return (
     <div className="stack">
@@ -86,18 +131,28 @@ export function Finder() {
         </div>
       </form>
 
+      <WeightControls weights={weights} onChange={setWeights} />
+
       {error && <div className="notice danger">{error}</div>}
 
-      {result && <Results result={result} nameById={nameById} />}
+      {result && <Results result={result} nameById={nameById} reranking={reranking} />}
     </div>
   );
 }
 
-function Results({ result, nameById }: { result: TargetResponse; nameById: Map<string, string> }) {
+function Results({
+  result,
+  nameById,
+  reranking,
+}: {
+  result: TargetResponse;
+  nameById: Map<string, string>;
+  reranking: boolean;
+}) {
   const nameOf = (id: string) => nameById.get(id) ?? "Connector";
 
   return (
-    <div className="stack">
+    <div className={reranking ? "stack reranking" : "stack"}>
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <div>
@@ -108,7 +163,7 @@ function Results({ result, nameById }: { result: TargetResponse; nameById: Map<s
             </div>
           </div>
           <div className="badge">
-            {result.source === "pdl" ? "PDL match" : "Manual"} {Math.round(result.matchConfidence * 100)}%
+            {reranking ? "Re-ranking\u2026" : `${result.source === "pdl" ? "PDL match" : "Manual"} ${Math.round(result.matchConfidence * 100)}%`}
           </div>
         </div>
         {result.source === "pdl" && result.matchConfidence < 0.75 && result.alternatives.length > 0 && (

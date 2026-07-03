@@ -25,6 +25,32 @@ export const DEFAULT_WEIGHTS: RubricWeights = {
   riskConsent: 0.05,
 };
 
+export const WEIGHT_KEYS: (keyof RubricWeights)[] = [
+  "closenessToTarget",
+  "credibility",
+  "closenessToYou",
+  "responsiveness",
+  "riskConsent",
+];
+
+/**
+ * Normalize arbitrary (e.g. user-provided slider) weights so they sum to 1.
+ * Keeps the composite on a 0-100 scale regardless of raw input, so the score
+ * thresholds (minScore, inferred bar) stay meaningful. Negative values are
+ * clamped to 0; an all-zero input falls back to the defaults.
+ */
+export function normalizeWeights(input: Partial<RubricWeights> | undefined): RubricWeights {
+  if (!input) return { ...DEFAULT_WEIGHTS };
+  const clamped = WEIGHT_KEYS.map((k) => Math.max(0, Number(input[k]) || 0));
+  const sum = clamped.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return { ...DEFAULT_WEIGHTS };
+  const out = {} as RubricWeights;
+  WEIGHT_KEYS.forEach((k, i) => {
+    out[k] = clamped[i] / sum;
+  });
+  return out;
+}
+
 export interface ScoringContext {
   /** Person IDs of the people you work with (contributors to the graph). */
   teamMemberIds: Set<string>;
