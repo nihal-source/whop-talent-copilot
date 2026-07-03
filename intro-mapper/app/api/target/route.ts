@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       source: resolved.source,
       alternatives: resolved.alternatives ?? [],
       paths: ranked.paths,
+      names: ranked.names,
     }),
   );
 }

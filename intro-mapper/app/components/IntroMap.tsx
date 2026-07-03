@@ -5,6 +5,11 @@ import ReactFlow, { Background, Controls, type Edge, type Node } from "reactflow
 import "reactflow/dist/style.css";
 import type { IntroPath, Person } from "@/lib/shared";
 
+const TARGET = "#fa4616";
+const CONFIRMED = "#3ecf8e";
+const LIKELY = "#f5b544";
+const TEAM = "#8a8a92";
+
 /**
  * Interactive intro map. Renders the target in the center with each ranked
  * connector fanning out, and the teammate who reaches them behind. Confirmed
@@ -28,7 +33,7 @@ export function IntroMap({
       id: target.id,
       position: { x: 420, y: 40 + top.length * 26 },
       data: { label: `\uD83C\uDFAF ${target.name}` },
-      style: nodeStyle("#6d8bff", true),
+      style: nodeStyle(TARGET, true),
       sourcePosition: "left" as any,
       targetPosition: "left" as any,
     });
@@ -40,14 +45,14 @@ export function IntroMap({
         id: p.connectorId,
         position: { x: 220, y },
         data: { label: `${personName(p.connectorId)}\n${p.breakdown.composite}` },
-        style: nodeStyle(p.veracity === "confirmed" ? "#59d9a5" : "#f5b544", false),
+        style: nodeStyle(p.veracity === "confirmed" ? CONFIRMED : LIKELY, false),
       });
       edges.push({
         id: `c-${p.connectorId}`,
         source: p.connectorId,
         target: target.id,
         animated: p.veracity === "confirmed",
-        style: { stroke: p.veracity === "confirmed" ? "#59d9a5" : "#f5b544", strokeDasharray: p.veracity === "confirmed" ? undefined : "6 4" },
+        style: { stroke: p.veracity === "confirmed" ? CONFIRMED : LIKELY, strokeDasharray: p.veracity === "confirmed" ? undefined : "6 4" },
         label: p.veracity,
       });
 
@@ -58,14 +63,14 @@ export function IntroMap({
             id: `team-${p.viaTeamMemberId}`,
             position: { x: 20, y: 40 + seenTeam.get(p.viaTeamMemberId)! * 90 },
             data: { label: `\uD83D\uDC64 ${personName(p.viaTeamMemberId)}` },
-            style: nodeStyle("#8b93a7", false),
+            style: nodeStyle(TEAM, false),
           });
         }
         edges.push({
           id: `t-${p.viaTeamMemberId}-${p.connectorId}`,
           source: `team-${p.viaTeamMemberId}`,
           target: p.connectorId,
-          style: { stroke: "#4b5165" },
+          style: { stroke: "#3a3a3f" },
         });
       }
     });
@@ -76,7 +81,7 @@ export function IntroMap({
   return (
     <div className="mapwrap">
       <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }}>
-        <Background color="#262b38" gap={20} />
+        <Background color="#2a2a2e" gap={20} />
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>
@@ -85,8 +90,8 @@ export function IntroMap({
 
 function nodeStyle(color: string, big: boolean): React.CSSProperties {
   return {
-    background: "#1b1f2a",
-    color: "#e6e9f0",
+    background: "#1c1c1f",
+    color: "#ededee",
     border: `1.5px solid ${color}`,
     borderRadius: 10,
     padding: big ? "10px 16px" : "8px 12px",

@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { NavLinks } from "./components/NavLinks";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
   title: "Intro Mapper",
@@ -11,18 +19,14 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   return (
-    <html lang="en">
+    <html lang="en" className={inter.variable}>
       <body>
         <header className="topbar">
           <Link href="/" className="brand">
+            <span className="brand-mark" aria-hidden />
             Intro<span>Mapper</span>
           </Link>
-          <nav className="nav">
-            <Link href="/">Find intros</Link>
-            <Link href="/queue">Queue</Link>
-            <Link href="/onboarding">Connect data</Link>
-            <Link href="/team">Team</Link>
-          </nav>
+          <NavLinks />
           <div className="who">
             {session ? (
               <>

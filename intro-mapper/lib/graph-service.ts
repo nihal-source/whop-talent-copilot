@@ -136,6 +136,8 @@ function responsivenessFrom(requests: IntroRequest[]): Map<string, number> {
 export interface RankedPaths {
   target: Person | null;
   paths: IntroPath[];
+  /** id -> display name for every person referenced in the paths (connectors, via-teammates, target). */
+  names: Record<string, string>;
 }
 
 export async function rankPathsForTarget(
@@ -146,7 +148,20 @@ export async function rankPathsForTarget(
   const graph = await buildGraph(orgId);
   addInferredCoworkerEdges(graph, targetId);
   const ctx = { ...(await buildScoringContext(orgId)), ...overrides };
-  return { target: graph.getPerson(targetId) ?? null, paths: rankIntroPaths(graph, targetId, ctx) };
+  const paths = rankIntroPaths(graph, targetId, ctx);
+
+  const names: Record<string, string> = {};
+  const record = (id: string) => {
+    const p = graph.getPerson(id);
+    if (p) names[id] = p.name;
+  };
+  record(targetId);
+  for (const path of paths) {
+    record(path.connectorId);
+    record(path.viaTeamMemberId);
+  }
+
+  return { target: graph.getPerson(targetId) ?? null, paths, names };
 }
 
 /**

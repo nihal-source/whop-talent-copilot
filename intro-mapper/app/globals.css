@@ -1,17 +1,30 @@
 :root {
-  --bg: #0b0d12;
-  --panel: #14171f;
-  --panel-2: #1b1f2a;
-  --border: #262b38;
-  --text: #e6e9f0;
-  --muted: #8b93a7;
-  --accent: #6d8bff;
-  --accent-2: #59d9a5;
-  --warn: #f5b544;
-  --danger: #f26d6d;
-  --confirmed: #59d9a5;
+  /* Whop-inspired dark palette. Vermilion is the signature accent. */
+  --bg: #0a0a0b;
+  --bg-glow: rgba(250, 70, 22, 0.08);
+  --panel: #141416;
+  --panel-2: #1c1c1f;
+  --panel-3: #232327;
+  --border: #2a2a2e;
+  --border-strong: #38383d;
+  --text: #ededee;
+  --muted: #9a9aa2;
+  --faint: #6b6b72;
+
+  --accent: #fa4616; /* Vermilion / Whop Orange */
+  --accent-hover: #ff5a2c;
+  --accent-press: #b62600; /* ember shadow */
+  --accent-wash: rgba(250, 70, 22, 0.12);
+
+  --lemon: #dbf505; /* electric energy accent, used sparingly */
+
+  --confirmed: #3ecf8e;
   --likely: #f5b544;
-  --radius: 12px;
+  --warn: #f5b544;
+  --danger: #ff5c52;
+
+  --radius: 14px;
+  --radius-sm: 9px;
 }
 
 * {
@@ -24,9 +37,18 @@ body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 15px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-image: radial-gradient(900px 500px at 78% -8%, var(--bg-glow), transparent 70%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 a {
@@ -34,23 +56,40 @@ a {
   text-decoration: none;
 }
 
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---------- Top bar ---------- */
 .topbar {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 28px;
   padding: 14px 28px;
   border-bottom: 1px solid var(--border);
-  background: rgba(20, 23, 31, 0.8);
-  backdrop-filter: blur(8px);
+  background: rgba(10, 10, 11, 0.72);
+  backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-weight: 700;
-  font-size: 18px;
-  letter-spacing: -0.02em;
+  font-size: 17px;
+  letter-spacing: -0.03em;
+}
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--accent);
+  box-shadow: 0 2px 0 var(--accent-press);
+  display: inline-block;
 }
 .brand span {
   color: var(--accent);
@@ -58,12 +97,22 @@ a {
 
 .nav {
   display: flex;
-  gap: 18px;
-  color: var(--muted);
+  gap: 4px;
   font-weight: 500;
+}
+.nav a {
+  color: var(--muted);
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition: color 0.12s ease, background 0.12s ease;
 }
 .nav a:hover {
   color: var(--text);
+  background: var(--panel-2);
+}
+.nav a.active {
+  color: var(--text);
+  background: var(--panel-3);
 }
 
 .who {
@@ -73,11 +122,13 @@ a {
   gap: 12px;
 }
 .org-chip {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  padding: 3px 10px;
+  background: var(--accent-wash);
+  border: 1px solid rgba(250, 70, 22, 0.35);
+  color: var(--accent-hover);
+  padding: 4px 11px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 .user-name {
   font-size: 14px;
@@ -86,28 +137,32 @@ a {
   color: var(--muted);
 }
 
+/* ---------- Layout ---------- */
 .main {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 32px 28px 80px;
+  padding: 40px 28px 96px;
 }
 
 .page-title {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 4px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  margin: 0 0 6px;
+  line-height: 1.1;
 }
 .page-sub {
   color: var(--muted);
   margin: 0 0 28px;
+  font-size: 15.5px;
 }
 
+/* ---------- Cards & structure ---------- */
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 22px;
+  padding: 24px;
 }
 
 .stack {
@@ -123,9 +178,10 @@ a {
 
 label {
   display: block;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 7px;
 }
 
 input[type="text"],
@@ -135,71 +191,112 @@ select {
   width: 100%;
   background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 10px 12px;
+  padding: 11px 13px;
   font-size: 14px;
+  font-family: inherit;
   outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--faint);
 }
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
+/* ---------- Buttons ---------- */
 button {
   background: var(--accent);
-  color: #0b0d12;
+  color: #fff;
   border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  padding: 10px 17px;
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
+  box-shadow: 0 2px 0 var(--accent-press);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease, filter 0.12s ease;
 }
-button:hover {
-  filter: brightness(1.08);
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--accent-press);
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 var(--accent-press);
 }
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 button.secondary {
-  background: var(--panel-2);
+  background: var(--panel-3);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
+  box-shadow: none;
+}
+button.secondary:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--faint);
+  transform: none;
 }
 button.ghost {
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--border);
+  box-shadow: none;
+}
+button.ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: none;
 }
 button.danger {
   background: transparent;
   color: var(--danger);
-  border: 1px solid var(--danger);
+  border: 1px solid rgba(255, 92, 82, 0.5);
+  box-shadow: none;
+}
+button.danger:hover:not(:disabled) {
+  background: rgba(255, 92, 82, 0.12);
+  transform: none;
 }
 
+/* ---------- Badges ---------- */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  padding: 3px 9px;
+  letter-spacing: 0.01em;
+  padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  text-transform: capitalize;
 }
 .badge.confirmed {
   color: var(--confirmed);
-  border-color: rgba(89, 217, 165, 0.4);
-  background: rgba(89, 217, 165, 0.08);
+  border-color: rgba(62, 207, 142, 0.4);
+  background: rgba(62, 207, 142, 0.1);
 }
 .badge.likely {
   color: var(--likely);
   border-color: rgba(245, 181, 68, 0.4);
-  background: rgba(245, 181, 68, 0.08);
+  background: rgba(245, 181, 68, 0.1);
 }
 
+/* ---------- Grid ---------- */
 .grid {
   display: grid;
   gap: 16px;
@@ -208,14 +305,20 @@ button.danger {
   grid-template-columns: 1fr 1fr;
 }
 
+/* ---------- Path cards ---------- */
 .path-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 20px;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  transition: border-color 0.14s ease, transform 0.14s ease;
+}
+.path-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
 }
 .path-head {
   display: flex;
@@ -224,19 +327,24 @@ button.danger {
   gap: 12px;
 }
 .connector-name {
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: 700;
+  font-size: 16.5px;
+  letter-spacing: -0.02em;
 }
 .connector-sub {
   color: var(--muted);
   font-size: 13px;
+  margin-top: 2px;
 }
 .score {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
+/* ---------- Rubric ---------- */
 .rubric {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -244,54 +352,74 @@ button.danger {
 }
 .rubric-cell {
   background: var(--panel-2);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
   text-align: center;
 }
 .rubric-cell .k {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
   display: block;
+  margin-bottom: 3px;
 }
 .rubric-cell .v {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
+/* ---------- Evidence ---------- */
 .evidence {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   color: var(--muted);
   font-size: 13px;
 }
+.evidence li {
+  display: flex;
+  gap: 8px;
+}
 .evidence li::before {
-  content: "\2022  ";
-  color: var(--accent);
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
+/* ---------- Dropzone ---------- */
 .dropzone {
-  border: 1.5px dashed var(--border);
+  border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
-  padding: 32px;
+  padding: 36px;
   text-align: center;
   color: var(--muted);
   background: var(--panel-2);
   cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+.dropzone:hover {
+  border-color: var(--faint);
 }
 .dropzone.drag {
   border-color: var(--accent);
+  background: var(--accent-wash);
   color: var(--text);
 }
 
+/* ---------- Toggle rows ---------- */
 .toggle-row {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 14px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--border);
 }
 .toggle-row:last-child {
@@ -301,6 +429,7 @@ button.danger {
   width: 18px;
   height: 18px;
   margin-top: 2px;
+  accent-color: var(--accent);
 }
 .toggle-row .t {
   font-weight: 600;
@@ -308,8 +437,10 @@ button.danger {
 .toggle-row .d {
   color: var(--muted);
   font-size: 13px;
+  margin-top: 2px;
 }
 
+/* ---------- Tables ---------- */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -317,23 +448,29 @@ table {
 th,
 td {
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px;
   border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
 th {
   color: var(--muted);
   font-weight: 500;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+tbody tr:hover td {
+  background: var(--panel-2);
 }
 
+/* ---------- Notices ---------- */
 .notice {
-  border-radius: 8px;
-  padding: 12px 14px;
-  font-size: 13px;
+  border-radius: var(--radius-sm);
+  padding: 13px 15px;
+  font-size: 13.5px;
 }
 .notice.info {
-  background: rgba(109, 139, 255, 0.1);
-  border: 1px solid rgba(109, 139, 255, 0.3);
+  background: var(--accent-wash);
+  border: 1px solid rgba(250, 70, 22, 0.28);
 }
 .notice.warn {
   background: rgba(245, 181, 68, 0.1);
@@ -341,21 +478,53 @@ th {
   color: var(--warn);
 }
 .notice.danger {
-  background: rgba(242, 109, 109, 0.1);
-  border: 1px solid rgba(242, 109, 109, 0.3);
+  background: rgba(255, 92, 82, 0.1);
+  border: 1px solid rgba(255, 92, 82, 0.3);
   color: var(--danger);
 }
 
+/* ---------- Empty state ---------- */
 .empty {
   text-align: center;
   color: var(--muted);
-  padding: 48px 0;
+  padding: 56px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
 }
 
+/* ---------- Map ---------- */
 .mapwrap {
-  height: 360px;
+  height: 380px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--panel-2);
+}
+.react-flow__controls button {
+  background: var(--panel-3);
+  border: none;
+  box-shadow: none;
+  color: var(--text);
+  fill: var(--text);
+}
+.react-flow__controls button:hover {
+  background: var(--panel-2);
+  transform: none;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 720px) {
+  .grid.two {
+    grid-template-columns: 1fr;
+  }
+  .rubric {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .nav {
+    display: none;
+  }
+  .main {
+    padding: 28px 18px 72px;
+  }
 }

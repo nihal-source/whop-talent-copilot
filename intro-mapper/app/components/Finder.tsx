@@ -10,6 +10,7 @@ interface TargetResponse {
   source: "pdl" | "manual";
   alternatives: Array<{ name: string; company?: string; linkedinUrl?: string; matchScore: number }>;
   paths: IntroPath[];
+  names: Record<string, string>;
 }
 
 interface IntroResponse {
@@ -42,7 +43,7 @@ export function Finder() {
       setBusy(false);
       return;
     }
-    const map = new Map<string, string>();
+    const map = new Map<string, string>(Object.entries(body.names ?? {}));
     map.set(body.target.id, body.target.name);
     setNameById(map);
     setResult(body);
