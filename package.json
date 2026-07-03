@@ -4,11 +4,14 @@
   "workspaces": [
     "shared",
     "extension",
-    "server"
+    "server",
+    "intro-mapper"
   ],
   "scripts": {
     "dev": "npm run dev -w extension",
     "build": "npm run build -w extension && npm run build -w server",
-    "dev:server": "npm run dev -w server"
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w intro-mapper",
+    "build:web": "npm run build -w intro-mapper"
   }
 }
