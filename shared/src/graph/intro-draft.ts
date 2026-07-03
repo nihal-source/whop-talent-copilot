@@ -14,12 +14,15 @@ export interface IntroFacts {
   targetName: string;
   /** Human-readable, verified relationship statements the draft may reference. */
   verifiedRelationship: string[];
+  /** Second-person phrasing for the ask, e.g. "are connected to them on LinkedIn". */
+  relationshipSecondPerson: string;
   /** Lowercased tokens permitted in claims (names, companies, platforms). */
   allowedTokens: Set<string>;
   /** True only when the connector->target edge is confirmed (not inferred). */
   relationshipConfirmed: boolean;
 }
 
+/** Third-person phrase for display: "<Connector> <phrase>". */
 function relationshipPhrase(edge: Edge): string {
   switch (edge.type) {
     case "connection":
@@ -32,6 +35,22 @@ function relationshipPhrase(edge: Edge): string {
       return "likely worked with them";
     default:
       return "knows them";
+  }
+}
+
+/** Second-person phrase for the ask: "you <phrase>". */
+function relationshipPhraseSecondPerson(edge: Edge): string {
+  switch (edge.type) {
+    case "connection":
+      return "are connected to them on LinkedIn";
+    case "follows":
+      return "follow them";
+    case "followed_by":
+      return "are followed by them";
+    case "coworker_inferred":
+      return "may have worked with them";
+    default:
+      return "may know them";
   }
 }
 
@@ -54,6 +73,7 @@ export function buildIntroFacts(graph: IntroGraph, path: IntroPath): IntroFacts 
     connectorName,
     targetName,
     verifiedRelationship: verified,
+    relationshipSecondPerson: relationshipPhraseSecondPerson(path.connectorToTarget),
     allowedTokens,
     relationshipConfirmed: path.veracity === "confirmed",
   };
@@ -138,14 +158,8 @@ export function validateIntroDraft(draft: string, facts: IntroFacts): IntroDraft
 export function draftIntroRequest(facts: IntroFacts, purpose: string): string {
   const hedge = facts.relationshipConfirmed ? "" : " if you two are actually in touch";
   return [
-    `Hey ${facts.connectorName.split(/\s+/)[0]} — I saw you ${relationshipHint(facts)}.`,
+    `Hey ${facts.connectorName.split(/\s+/)[0]} — I saw you ${facts.relationshipSecondPerson}.`,
     `I'm trying to reach ${facts.targetName} about ${purpose.trim() || "a quick conversation"}.`,
     `Would you be open to a warm intro${hedge}? Happy to send a forwardable blurb.`,
   ].join(" ");
-}
-
-function relationshipHint(facts: IntroFacts): string {
-  return facts.verifiedRelationship[0]
-    ? facts.verifiedRelationship[0].replace(`${facts.connectorName} `, "")
-    : "may know them";
 }
