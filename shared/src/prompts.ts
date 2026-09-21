@@ -1,7 +1,7 @@
 import type {
   ContextFact,
+  DraftSet,
   FounderVariant,
-  OutreachPersona,
   PersonaConfig,
   PersonalStructure,
   ProfileData,
@@ -9,8 +9,63 @@ import type {
   TalentTrack,
   TouchType,
 } from "./types";
-import { WHOP_PROOF_POINTS } from "./defaults";
-import { MESSAGE_WORD_MAX, MESSAGE_WORD_MIN, buildAllowedFacts } from "./validation";
+import {
+  DEFAULT_PERSONAL_STRUCTURE,
+  PERSONAL_SHAPES,
+  WHOP_PROOF_POINTS,
+  otherPersonalStructure,
+} from "./defaults";
+import { buildAllowedFacts, formatWordRange, wordRangeFor } from "./validation";
+
+function shapeBlock(structure: PersonalStructure, role: "primary" | "alternate"): string {
+  const shape = PERSONAL_SHAPES[structure];
+  const range = formatWordRange(
+    wordRangeFor(role === "primary" ? "initial" : "initialAlt", {
+      persona: "personal",
+      personalStructure: role === "primary" ? structure : otherPersonalStructure(structure),
+    }),
+  );
+  const field = role === "primary" ? "initial" : "initialAlt";
+  return `${shape.label} — ${range} words — return as "${field}"
+  ${shape.recipe}`;
+}
+
+function personalInitialRules(structure: PersonalStructure, persona: PersonaConfig): string {
+  const alt = otherPersonalStructure(structure);
+  const shape1Example = persona.examples.initial;
+  const shape2Example = persona.examples.initialWithValueProp ?? persona.examples.initial;
+
+  return `INITIAL MESSAGE — TWO ALLOWED SHAPES, NOTHING ELSE:
+${shapeBlock(structure, "primary")}
+${shapeBlock(alt, "alternate")}
+
+Write both. The recruiter picked ${PERSONAL_SHAPES[structure].label} as the primary, so that one goes in "initial".
+Both must open on the SAME true observation — the only difference is whether a single value-prop line follows it.
+
+THE OBSERVATION:
+- Exactly one concrete fact that is true of THIS person, taken from PROFILE, ALLOWED FACTS, NOTES, or VERIFIED EXTERNAL CONTEXT.
+- When nothing distinctive is available, observe something plain and verifiable (current role, current company, a past company, a school) and ask a sharper question. Never reach for a stronger-sounding fact you cannot support.
+- Uncertain about something? Ask about it. A clean question always beats a guess.
+
+THE QUESTION:
+- One real question about the observation, the kind you'd actually want answered.
+- Not a closing line, not "worth a quick chat?" in Shape 1.
+
+THE VALUE PROP (Shape 2 only):
+- One sentence. At most ONE proof point from the library below, and only when it connects to the observation.
+- Never a paragraph, never a stack of stats, never comp numbers unless the notes say they asked.
+
+DO NOT WRITE THE OLD TEMPLATE. These are retired and must not appear in any form:
+- "ever think abt a higher ceiling than what ur doing at X"
+- "we're 75% ex-founders … unicorn'd with only 60 people … mercor eng #1" strung into a pitch paragraph
+- any multi-line Whop pitch, or an opener that exists only to set up the pitch
+
+SHAPE 1 EXAMPLE (voice and shape only — never reuse its facts):
+${shape1Example}
+
+SHAPE 2 EXAMPLE (voice and shape only — never reuse its facts):
+${shape2Example}`;
+}
 
 export function buildSystemPrompt(
   persona: PersonaConfig,
@@ -19,8 +74,11 @@ export function buildSystemPrompt(
   founderVariant?: FounderVariant,
   personalStructure?: PersonalStructure,
 ): string {
+  const isFounder = persona.id === "founder";
+  const structure = personalStructure ?? DEFAULT_PERSONAL_STRUCTURE;
+
   const proofLines =
-    founderVariant === "founder_direct" || persona.id === "personal"
+    founderVariant === "founder_direct" || !isFounder
       ? Object.entries(WHOP_PROOF_POINTS)
           .map(([k, v]) => `- ${k}: ${v}`)
           .join("\n")
@@ -30,24 +88,34 @@ export function buildSystemPrompt(
     segment.ageBand === "20s"
       ? "Use max slang, cracked/lit OK, equity angle, shorter."
       : segment.ageBand === "40s" || segment.ageBand === "50s+"
-        ? "Less slang, comp/ceiling angle, respect tenure, no bro/lol."
+        ? "Less slang, respect tenure, no bro/lol."
         : "Balanced casual tone.";
 
-  const personaRules =
-    persona.id === "founder"
-      ? `Founder voice: keep it punchy and casual. Variant: ${founderVariant ?? "founder_subtle_career"}. No multi-paragraph Whop pitch unless founder_direct.`
-      : `Personal voice: ${personalStructure ?? "personal_full"}. Structure B = observation-led, still land within the word range below.`;
+  const founderRange = formatWordRange(wordRangeFor("initial", { persona: "founder" }));
+  const followUpRange = formatWordRange(wordRangeFor("followUp1", { persona: persona.id, personalStructure: structure }));
+
+  const lengthRules = isFounder
+    ? `LENGTH (HARD REQUIREMENT):
+- EVERY message (initial AND every follow-up) MUST be between ${founderRange} words. Count before returning.
+- If you would fall short, add one more concrete, profile-specific line rather than filler.`
+    : `LENGTH:
+- Each message has its own range, listed with its shape below. Follow-ups: ${followUpRange} words.
+- Count before returning, then stop. A tight 25-word Shape 1 beats a padded 50-word one — never add filler, a second observation, or a pitch just to reach a number.`;
+
+  const personaRules = isFounder
+    ? `Founder voice: keep it punchy and casual. Variant: ${founderVariant ?? "founder_subtle_career"}. No multi-paragraph Whop pitch unless founder_direct.
+
+EXAMPLE INITIAL:
+${persona.examples.initial}`
+    : personalInitialRules(structure, persona);
 
   return `You write LinkedIn outreach for Whop recruiting. Persona: ${persona.label}.
+Every message is a DRAFT a human reviews and sends. Nothing is auto-sent.
 
-LENGTH (HARD REQUIREMENT):
-- EVERY message (initial AND every follow-up) MUST be between ${MESSAGE_WORD_MIN} and ${MESSAGE_WORD_MAX} words.
-- Do not go under ${MESSAGE_WORD_MIN} or over ${MESSAGE_WORD_MAX} words. Count words before returning.
-- If you would fall short, add one more concrete, profile-specific line rather than filler.
+${lengthRules}
 
 STYLE:
 - Tone: ${persona.styleGuide.tone}
-- Length: ${MESSAGE_WORD_MIN}-${MESSAGE_WORD_MAX} words per message (overrides any other length guidance)
 - Must include: ${persona.styleGuide.mustInclude.join("; ")}
 - Must avoid: ${persona.styleGuide.mustAvoid.join("; ")}
 
@@ -58,25 +126,26 @@ ${segmentGuidance}
 
 TRACK: ${track}
 
-WHOP PROOF LIBRARY (use sparingly, only when relevant):
+WHOP PROOF LIBRARY (at most one, and only where a value prop is allowed):
 ${proofLines}
 
 RULES:
 - Never invent facts. You may ONLY reference facts from PROFILE, NOTES, ALLOWED FACTS, or VERIFIED EXTERNAL CONTEXT (all provided in the user message).
 - Do NOT claim mutual connections, meetings, referrals, or events unless explicitly in NOTES
-- Do NOT invent funding rounds, promotions, or social posts. You MAY reference a funding round, launch, news item, or post ONLY if it appears verbatim in VERIFIED EXTERNAL CONTEXT.
+- Do NOT invent quota numbers, #1 or top-performer rankings, promotions, funding rounds, or social posts. You MAY reference a funding round, launch, news item, or post ONLY if it appears verbatim in VERIFIED EXTERNAL CONTEXT.
 - When you use an item from VERIFIED EXTERNAL CONTEXT, reference it naturally and accurately — do not exaggerate or add details beyond what the context states.
-- If a detail is missing, use a generic observation or ask a question — do not guess
+- If a detail is missing, observe something you can support and ask a question — do not guess
 - Mirror casual spelling (u, w/, yo) — do not correct to formal English
 - Never blend Personal and Founder voice
-- Only use Whop proof points when persona/variant allows pitching Whop
-- Use ONLY names/companies/schools from ALLOWED FACTS or VERIFIED EXTERNAL CONTEXT
-
-EXAMPLE INITIAL:
-${persona.examples.initial}`;
+- Use ONLY names/companies/schools from ALLOWED FACTS or VERIFIED EXTERNAL CONTEXT`;
 }
 
-function formatAllowedFacts(profile: ProfileData, notes: string, allowWhopProof: boolean): string {
+function formatAllowedFacts(
+  profile: ProfileData,
+  notes: string,
+  allowWhopProof: boolean,
+  pitchNote: string,
+): string {
   const facts = buildAllowedFacts(profile, notes, allowWhopProof);
   return `ALLOWED FACTS (only reference these — nothing else):
 - Names: ${facts.names.join(", ") || "none"}
@@ -84,7 +153,7 @@ function formatAllowedFacts(profile: ProfileData, notes: string, allowWhopProof:
 - Schools: ${facts.schools.join(", ") || "none"}
 - Titles: ${facts.titles.slice(0, 5).join(", ") || "none"}
 - User notes: ${notes.trim() || "none"}
-- Whop pitch allowed: ${allowWhopProof ? "yes" : "no — observation only"}`;
+- Whop pitch allowed: ${pitchNote}`;
 }
 
 function formatExternalContext(context: ContextFact[]): string {
@@ -106,9 +175,24 @@ export function buildUserPrompt(
   notes: string,
   touchType: TouchType,
   topPerformers: string[] = [],
-  opts?: { allowWhopProof?: boolean; context?: ContextFact[] },
+  opts?: {
+    allowWhopProof?: boolean;
+    context?: ContextFact[];
+    persona?: PersonaConfig["id"];
+    personalStructure?: PersonalStructure;
+  },
 ): string {
   const allowWhopProof = opts?.allowWhopProof ?? true;
+  const persona = opts?.persona ?? "personal";
+  const structure = opts?.personalStructure ?? DEFAULT_PERSONAL_STRUCTURE;
+  const wantsAlt = persona === "personal";
+  // The Personal persona always drafts a Shape 2 message, so the proof library is
+  // available — but only that one message may use it.
+  const pitchNote = !allowWhopProof
+    ? "no — observation only"
+    : persona === "personal"
+      ? `only in the Shape 2 message (${PERSONAL_SHAPES[structure].number === 2 ? "initial" : "initialAlt"}) — never in Shape 1`
+      : "yes";
   const externalContext = formatExternalContext(opts?.context ?? []);
   const performers =
     topPerformers.length > 0
@@ -122,7 +206,7 @@ export function buildUserPrompt(
 
   return `Generate outreach for touch type: ${touchType}
 
-${formatAllowedFacts(profile, notes, allowWhopProof)}
+${formatAllowedFacts(profile, notes, allowWhopProof, pitchNote)}
 ${externalContext}
 PROFILE (scraped — treat as source of truth):
 - Name: ${profile.name} (first: ${profile.firstName}, short: ${profile.shortName})
@@ -139,15 +223,37 @@ SEGMENT: ${JSON.stringify(segment)}
 NOTES: ${notes || "none"}
 ${performers}
 
-Each of initial, followUp1, and followUp2 MUST be ${MESSAGE_WORD_MIN}-${MESSAGE_WORD_MAX} words.
+${lengthContract(persona, structure, wantsAlt)}
 
 Return JSON only (no markdown):
 {
-  "initial": "...",
+  "initial": "...",${wantsAlt ? '\n  "initialAlt": "...",' : ""}
   "followUp1": "...",
   "followUp2": "...",
-  "reasoning": "internal only — list which allowed facts you used and confirm each message is ${MESSAGE_WORD_MIN}-${MESSAGE_WORD_MAX} words"
+  "reasoning": "internal only — name the observation you used and where it came from, and confirm each message is inside its word range"
 }`;
+}
+
+function lengthContract(
+  persona: PersonaConfig["id"],
+  structure: PersonalStructure,
+  wantsAlt: boolean,
+): string {
+  const range = (key: "initial" | "initialAlt" | "followUp1") =>
+    formatWordRange(wordRangeFor(key, { persona, personalStructure: structure }));
+
+  if (persona === "founder") {
+    return `Each of initial, followUp1, and followUp2 MUST be ${range("initial")} words.`;
+  }
+
+  const altShape = PERSONAL_SHAPES[otherPersonalStructure(structure)];
+  const lines = [
+    `- initial: ${PERSONAL_SHAPES[structure].label}, ${range("initial")} words`,
+    wantsAlt ? `- initialAlt: ${altShape.label}, ${range("initialAlt")} words` : "",
+    `- followUp1 and followUp2: ${range("followUp1")} words each`,
+  ].filter(Boolean);
+
+  return `WORD RANGES (do not pad to reach them):\n${lines.join("\n")}`;
 }
 
 import { parseDraftJson } from "./validation";
@@ -156,7 +262,7 @@ export async function callAnthropic(
   apiKey: string,
   system: string,
   user: string,
-): Promise<{ initial: string; followUp1: string; followUp2: string }> {
+): Promise<DraftSet> {
   if (!apiKey.trim()) throw new Error("Anthropic API key is required");
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {

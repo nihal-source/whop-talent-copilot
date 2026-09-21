@@ -1,4 +1,4 @@
-import type { PersonaConfig, TalentBarConfig } from "./types";
+import type { PersonaConfig, PersonalStructure, TalentBarConfig } from "./types";
 
 export const DEFAULT_TALENT_BAR: TalentBarConfig = {
   gtmAgeCap: 30,
@@ -67,33 +67,94 @@ export const WHOP_PROOF_POINTS: Record<string, string> = {
   location: "NYC",
 };
 
+/**
+ * The two shapes an initial Personal message may take. Everything the prompt,
+ * the Options hints, and the side panel say about message structure comes from
+ * here so the UI and the model can never drift apart.
+ */
+export const PERSONAL_SHAPES: Record<
+  PersonalStructure,
+  { key: PersonalStructure; number: 1 | 2; label: string; shortLabel: string; recipe: string; whopPitchAllowed: boolean }
+> = {
+  personal_obs_only: {
+    key: "personal_obs_only",
+    number: 1,
+    label: "Shape 1 — observation → question",
+    shortLabel: "Shape 1 (observation → question)",
+    recipe:
+      "One concrete, true observation about them, then one real question about it. No Whop pitch, no comp, no proof points, no ask for a call.",
+    whopPitchAllowed: false,
+  },
+  personal_obs_value: {
+    key: "personal_obs_value",
+    number: 2,
+    label: "Shape 2 — observation → value prop → question",
+    shortLabel: "Shape 2 (observation → value prop → question)",
+    recipe:
+      "One concrete, true observation about them, then ONE short line on why Whop might be worth a look (at most one proof point), then one question.",
+    whopPitchAllowed: true,
+  },
+};
+
+export const DEFAULT_PERSONAL_STRUCTURE: PersonalStructure = "personal_obs_only";
+
+/** Settings written before the two-shape rewrite stored "personal_full". */
+export function normalizePersonalStructure(value: unknown): PersonalStructure {
+  if (value === "personal_obs_only" || value === "personal_obs_value") return value;
+  if (value === "personal_full") return "personal_obs_value";
+  return DEFAULT_PERSONAL_STRUCTURE;
+}
+
+export function otherPersonalStructure(structure: PersonalStructure): PersonalStructure {
+  return structure === "personal_obs_only" ? "personal_obs_value" : "personal_obs_only";
+}
+
 export const DEFAULT_PERSONAS: Record<"personal" | "founder", PersonaConfig> = {
   personal: {
     id: "personal",
     label: "Personal",
     styleGuide: {
-      tone: "Casual, broken-English-ish, Gen-Z. Not polished corporate prose.",
-      length: "50-70 words for every message (initial and follow-ups).",
-      mustInclude: ["profile-specific detail", "natural fillers: lol, bro, yoo"],
-      mustAvoid: ["I hope this finds you well", "corporate recruiter speak", "formal English corrections"],
+      tone: "Casual, lowercase, Gen-Z. Observation-led and curious — a real person noticing something, not a recruiter opening a pitch.",
+      length: "Shape 1: 18-45 words. Shape 2: 30-60 words. Follow-ups: 25-55 words. Short is fine — never pad.",
+      mustInclude: ["one concrete detail that is true of this specific person", "a real question"],
+      mustAvoid: [
+        "I hope this finds you well",
+        "corporate recruiter speak",
+        "formal English corrections",
+        "multi-line Whop pitches",
+        "ceiling framing (\"higher ceiling than what ur doing at X\")",
+        "stacking proof points / comp stats",
+        "invented quota, #1 rankings, mutual connections, or funding rounds",
+        "filler added just to reach a word count",
+      ],
     },
     framework: {
       initial: {
         steps: [
-          { instruction: "Relevant observation from profile", templateLine: "yoo {shortName} — {detail}" },
-          { instruction: "Inference on problem or career tension" },
-          { instruction: "Quick value prop / Whop proof (1-2 lines max)" },
-          { instruction: "CTA", templateLine: "curious?" },
+          {
+            instruction: "One concrete, true observation drawn from the profile or verified context",
+            templateLine: "yoo {shortName} — {observation}",
+          },
+          {
+            instruction:
+              "Shape 2 only: one short line on why Whop might be worth a look (one sentence, at most one proof point). Omit entirely in Shape 1.",
+          },
+          {
+            instruction: "One real question about the observation — curiosity, not a closing line",
+            templateLine: "curious how that's been?",
+          },
         ],
+        maxSentences: 4,
       },
-      followUp1: { steps: [{ instruction: "Light bump, same casual tone, no guilt" }], toneShift: "lighter" },
-      followUp2: { steps: [{ instruction: "Graceful close or final short ask" }], toneShift: "final" },
+      followUp1: { steps: [{ instruction: "Light bump on the same observation, no guilt, no new pitch" }], toneShift: "lighter" },
+      followUp2: { steps: [{ instruction: "Graceful close or one final short ask" }], toneShift: "final" },
     },
     senderContext: { name: "", title: "Recruiting", company: "Whop", pitchLine: "scaling the team @ whop" },
     examples: {
-      initial: `yoo kasyap saw u followed whop - had to reach out. ever think abt a higher ceiling than what ur doing at brief rn? we're 75% ex-founders here (including mercor eng #1) and somehow unicorn'd with only 60 people, so it's a pretty wild crew. if u like real autonomy + actually building instead of just shipping tickets, that's exactly what we're hiring for. worth a quick chat?`,
-      followUp1: `hey bumping this back up - still think u'd genuinely vibe with what we're building over here. i know inbound is noisy so no stress if it slipped, but the ceiling thing is real and the team's only getting more stacked. even a quick 15 min call could be worth ur time imo. u around this week to chat, or is timing just bad rn?`,
-      followUp2: `all good if the timing's off, i totally get it - u've got a lot going on. gonna leave u alone after this lol. but seriously if u ever get curious abt comp, the role, or just what building @ whop actually looks like day to day, my dms stay open. no expiry on that. keep doing ur thing man, rooting for u either way`,
+      initial: `yoo kasyap — saw ur at brief now after founding sherpa. what made u go back to building inside someone else's company? curious how that's been so far`,
+      initialWithValueProp: `yoo kasyap — noticed u've been on brief's infra since the seed round. we're building out eng @ whop rn and the autonomy is genuinely the selling point. worth a quick chat abt it?`,
+      followUp1: `hey bumping this — still curious abt the brief infra thing tbh. no stress if timing's bad, just figured i'd ask once more. u around this week?`,
+      followUp2: `all good if the timing's off — gonna stop bugging u after this lol. dms stay open if u ever get curious abt whop. keep doing ur thing man`,
     },
     followUpCadenceDays: [4, 9],
   },
