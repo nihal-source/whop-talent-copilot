@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
 
-import type { AppSettings, TalentBarConfig } from "@whop-copilot/shared";
+import type { AppSettings, PersonalStructure, TalentBarConfig } from "@whop-copilot/shared";
+import { PERSONAL_SHAPES, PERSONAL_SHAPE_WORD_RANGES, formatWordRange } from "@whop-copilot/shared";
 
 import "./options.css";
+
+const ENRICHMENT_PROVIDERS: Array<{ value: AppSettings["enrichmentProvider"]; label: string }> = [
+  { value: "none", label: "None — scrape the open LinkedIn tab (free)" },
+  { value: "crustdata", label: "Crustdata — person enrich (URL → profile)" },
+  { value: "apify", label: "Apify — real-time LinkedIn enricher (URL → data)" },
+  { value: "pdl", label: "People Data Labs — identity resolution" },
+];
 
 async function send<T>(msg: Record<string, unknown>): Promise<T> {
   const res = await chrome.runtime.sendMessage(msg);
@@ -76,14 +84,36 @@ function OptionsPage() {
                 })
               }
             >
-              <option value="none">None — scrape the open LinkedIn tab (free)</option>
-              <option value="apify">Apify — real-time LinkedIn enricher (URL → data)</option>
+              {ENRICHMENT_PROVIDERS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
             </select>
           </label>
           <p className="hint">
             Optional. With a provider set, you can pull full profile data from just a URL and
             bulk-enrich your whole queue without opening each profile.
           </p>
+
+          {settings.enrichmentProvider === "crustdata" && (
+            <>
+              <label>
+                Crustdata API Key
+                <input
+                  type="password"
+                  value={settings.crustdataApiKey}
+                  onChange={(e) => setSettings({ ...settings, crustdataApiKey: e.target.value })}
+                />
+              </label>
+              <p className="hint">
+                Calls Crustdata&apos;s person-enrich API with the profile URL and normalizes the
+                result into the same profile shape as the scraper. Get a key at crustdata.com →
+                dashboard (sent as <code>Authorization: Token …</code>). Stored in chrome.storage
+                only — never committed.
+              </p>
+            </>
+          )}
 
           {settings.enrichmentProvider === "apify" && (
             <>
@@ -100,6 +130,24 @@ function OptionsPage() {
               <p className="hint">
                 Uses the no-cookie LinkedIn Profile Enricher actor (public data only, pay per
                 result). Get a token at apify.com → Settings → Integrations.
+              </p>
+            </>
+          )}
+
+          {settings.enrichmentProvider === "pdl" && (
+            <>
+              <label>
+                People Data Labs API Key
+                <input
+                  type="password"
+                  value={settings.enrichmentApiToken}
+                  onChange={(e) =>
+                    setSettings({ ...settings, enrichmentApiToken: e.target.value })
+                  }
+                />
+              </label>
+              <p className="hint">
+                Consent-based identity resolution — also used for warm-intro target lookup.
               </p>
             </>
           )}
@@ -242,9 +290,11 @@ function OptionsPage() {
                   />
                 </label>
                 <label>
-                  Example initial
+                  {personaId === "personal"
+                    ? `Example initial — ${PERSONAL_SHAPES.personal_obs_only.label} (${formatWordRange(PERSONAL_SHAPE_WORD_RANGES.personal_obs_only)} words)`
+                    : "Example initial"}
                   <textarea
-                    rows={5}
+                    rows={4}
                     value={p.examples.initial}
                     onChange={(e) =>
                       setSettings({
@@ -260,6 +310,36 @@ function OptionsPage() {
                     }
                   />
                 </label>
+                {personaId === "personal" && (
+                  <>
+                    <label>
+                      Example initial — {PERSONAL_SHAPES.personal_obs_value.label} (
+                      {formatWordRange(PERSONAL_SHAPE_WORD_RANGES.personal_obs_value)} words)
+                      <textarea
+                        rows={4}
+                        value={p.examples.initialWithValueProp ?? ""}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            personas: {
+                              ...settings.personas,
+                              [personaId]: {
+                                ...p,
+                                examples: { ...p.examples, initialWithValueProp: e.target.value },
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </label>
+                    <p className="hint">
+                      These two are the only shapes an initial message may take, and both are
+                      generated every time so you can pick. Shape 1 is deliberately shorter —
+                      padding an observation out to 50 words is what turned the old drafts into a
+                      pitch, so leave it short rather than adding filler.
+                    </p>
+                  </>
+                )}
                 <label>
                   Must avoid
                   <textarea
@@ -322,6 +402,24 @@ function OptionsPage() {
               </div>
             );
           })}
+
+          <h3>Personal message shape default</h3>
+          <select
+            value={settings.personalStructure}
+            onChange={(e) =>
+              setSettings({ ...settings, personalStructure: e.target.value as PersonalStructure })
+            }
+          >
+            {(Object.keys(PERSONAL_SHAPES) as PersonalStructure[]).map((key) => (
+              <option key={key} value={key}>
+                {PERSONAL_SHAPES[key].label}
+              </option>
+            ))}
+          </select>
+          <p className="hint">
+            {PERSONAL_SHAPES[settings.personalStructure].recipe} The other shape is drafted
+            alongside it, so this only decides which one lands in the Initial slot.
+          </p>
 
           <h3>Founder variant default</h3>
           <select

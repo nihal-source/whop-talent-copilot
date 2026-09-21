@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PERSONAL_STRUCTURE,
   DEFAULT_PERSONAS,
   DEFAULT_TALENT_BAR,
   aggregateMetrics,
@@ -7,10 +8,13 @@ import {
   buildUserPrompt,
   callAnthropic,
   enrichProfile,
+  enrichmentTokenFor,
   extractMessageFeatures,
   fetchProfileContext,
   isProfileReadyForGeneration,
   levenshtein,
+  normalizePersonalStructure,
+  otherPersonalStructure,
   sanitizeSentText,
   scoreProfile,
   validateDraftSet,
@@ -32,20 +36,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: "",
   enrichmentProvider: "none",
   enrichmentApiToken: "",
+  crustdataApiKey: "",
   contextProvider: "none",
   contextApiToken: "",
   activePersona: "personal",
   activeTrack: "engineering",
   founderVariant: "founder_subtle_career",
-  personalStructure: "personal_full",
+  personalStructure: DEFAULT_PERSONAL_STRUCTURE,
   talentBar: DEFAULT_TALENT_BAR,
   personas: DEFAULT_PERSONAS,
-  frameworkVersion: "v1",
+  frameworkVersion: "v2-shapes",
 };
 
 async function getSettings(): Promise<AppSettings> {
   const { [SETTINGS_KEY]: s } = await chrome.storage.local.get(SETTINGS_KEY);
-  return { ...DEFAULT_SETTINGS, ...(s as AppSettings | undefined) };
+  const stored = s as AppSettings | undefined;
+  const merged = { ...DEFAULT_SETTINGS, ...stored };
+  // Settings saved before the two-shape rewrite carry the retired "personal_full".
+  merged.personalStructure = normalizePersonalStructure(merged.personalStructure);
+  return merged;
 }
 
 async function saveSettings(settings: AppSettings) {
@@ -142,6 +151,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           if (patch?.talentBar) {
             merged.talentBar = { ...settings.talentBar, ...patch.talentBar };
           }
+          merged.personalStructure = normalizePersonalStructure(merged.personalStructure);
           await saveSettings(merged);
           sendResponse({ ok: true });
           break;
@@ -159,7 +169,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           }
           const profile = await enrichProfile(
             settings.enrichmentProvider,
-            settings.enrichmentApiToken,
+            enrichmentTokenFor(settings.enrichmentProvider, settings),
             url,
           );
           sendResponse({ ok: true, data: profile });
@@ -184,7 +194,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             try {
               const fresh = await enrichProfile(
                 settings.enrichmentProvider,
-                settings.enrichmentApiToken,
+                enrichmentTokenFor(settings.enrichmentProvider, settings),
                 url,
               );
               entry.profile = fresh;
@@ -262,27 +272,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           const personaId = msg.persona as OutreachPersona;
           const persona = settings.personas[personaId];
           const founderVariant = msg.founderVariant ?? settings.founderVariant;
+          const personalStructure = normalizePersonalStructure(
+            msg.personalStructure ?? settings.personalStructure,
+          );
+          // Shape 2 carries the one-line value prop, so the Personal persona still
+          // needs the proof library even when Shape 1 is primary.
           const allowWhopProof = personaId !== "founder" || founderVariant === "founder_direct";
           const events = await getEvents();
           const topPerformers = getTopPerformers(events, segment.segmentKey);
 
-          const system = buildSystemPrompt(
-            persona,
-            segment,
-            msg.track,
-            founderVariant,
-            msg.personalStructure ?? settings.personalStructure,
-          );
+          const system = buildSystemPrompt(persona, segment, msg.track, founderVariant, personalStructure);
           const context = (msg.context as ContextFact[] | undefined) ?? [];
           const user = buildUserPrompt(profile, segment, msg.notes ?? "", "initial", topPerformers, {
             allowWhopProof,
             context,
+            persona: personaId,
+            personalStructure,
           });
           const drafts = await callAnthropic(settings.anthropicApiKey, system, user);
 
           const validation = validateDraftSet(drafts, profile, msg.notes ?? "", {
             personaIsFounder: msg.persona === "founder",
             founderVariant,
+            personalStructure,
             context,
           });
           if (!validation.valid) {
@@ -297,12 +309,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             linkedinUrl: profile.linkedinUrl,
             name: profile.name,
             status: "drafted",
-            structureVariant:
-              personaId === "founder"
-                ? (msg.founderVariant ?? settings.founderVariant)
-                : (msg.personalStructure ?? settings.personalStructure),
+            structureVariant: personaId === "founder" ? founderVariant : personalStructure,
             founderVariant: msg.founderVariant,
-            personalStructure: msg.personalStructure,
+            personalStructure: personaId === "founder" ? undefined : personalStructure,
             drafts,
             sentMessageIds: [],
             notes: msg.notes ?? "",
@@ -336,14 +345,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             sendResponse({ ok: false, error: "Cannot mark empty message as sent" });
             break;
           }
-          const generatedText = record.drafts[
-            touchType === "initial" ? "initial" : touchType === "follow_up_1" ? "followUp1" : "followUp2"
-          ];
+          // The recruiter may have sent the alternate shape, so attribute the send to
+          // whichever draft the sent text actually came from.
+          let generatedText =
+            touchType === "initial"
+              ? record.drafts.initial
+              : touchType === "follow_up_1"
+                ? record.drafts.followUp1
+                : record.drafts.followUp2;
+          let structureVariant = record.structureVariant ?? "";
+          if (touchType === "initial" && record.drafts.initialAlt && record.personalStructure) {
+            const altStructure = otherPersonalStructure(record.personalStructure);
+            if (
+              levenshtein(record.drafts.initialAlt, sentText) < levenshtein(record.drafts.initial, sentText)
+            ) {
+              generatedText = record.drafts.initialAlt;
+              structureVariant = altStructure;
+            }
+          }
 
           const features = extractMessageFeatures(sentText, {
             persona: record.persona,
             touchType,
-            structureVariant: record.structureVariant ?? "",
+            structureVariant,
             recipientSegment: record.segment,
             firstName: record.profile.firstName,
             shortName: record.profile.shortName,
@@ -360,7 +384,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             features,
             recipientSegment: record.segment,
             frameworkVersion: settings.frameworkVersion,
-            variationKey: `${record.persona}_${touchType}_${record.structureVariant}`,
+            variationKey: `${record.persona}_${touchType}_${structureVariant}`,
             timestamp: new Date().toISOString(),
           });
 
