@@ -1,8 +1,44 @@
-import type { ContextFact, DraftSet, ProfileData } from "./types";
-import { NAME_SHORTENINGS } from "./defaults";
+import type { ContextFact, DraftSet, OutreachPersona, PersonalStructure, ProfileData } from "./types";
+import { DEFAULT_PERSONAL_STRUCTURE, NAME_SHORTENINGS, otherPersonalStructure } from "./defaults";
 
+/** Default range, still used by the Founder persona and by follow-up length guidance. */
 export const MESSAGE_WORD_MIN = 50;
 export const MESSAGE_WORD_MAX = 70;
+
+export interface WordRange {
+  min: number;
+  max: number;
+}
+
+/**
+ * Shape 1 lands naturally shorter than Shape 2 — padding an observation-plus-question
+ * message out to 50 words is exactly what used to turn it into a pitch, so each shape
+ * gets the range it reads well at instead of one shared range.
+ */
+export const PERSONAL_SHAPE_WORD_RANGES: Record<PersonalStructure, WordRange> = {
+  personal_obs_only: { min: 18, max: 45 },
+  personal_obs_value: { min: 30, max: 60 },
+};
+
+export const PERSONAL_FOLLOW_UP_WORD_RANGE: WordRange = { min: 25, max: 55 };
+export const FOUNDER_WORD_RANGE: WordRange = { min: MESSAGE_WORD_MIN, max: MESSAGE_WORD_MAX };
+
+export type DraftKey = "initial" | "initialAlt" | "followUp1" | "followUp2";
+
+export function wordRangeFor(
+  key: DraftKey,
+  opts: { persona?: OutreachPersona; personalStructure?: PersonalStructure } = {},
+): WordRange {
+  if (opts.persona === "founder") return FOUNDER_WORD_RANGE;
+  const structure = opts.personalStructure ?? DEFAULT_PERSONAL_STRUCTURE;
+  if (key === "initial") return PERSONAL_SHAPE_WORD_RANGES[structure];
+  if (key === "initialAlt") return PERSONAL_SHAPE_WORD_RANGES[otherPersonalStructure(structure)];
+  return PERSONAL_FOLLOW_UP_WORD_RANGE;
+}
+
+export function formatWordRange(range: WordRange): string {
+  return `${range.min}-${range.max}`;
+}
 
 export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -19,6 +55,8 @@ export interface AllowedFacts {
   whopProofAllowed: boolean;
   /** Lowercased concatenation of enabled external context — grounds news/funding/company claims. */
   contextCorpus: string;
+  /** Everything we actually know, lowercased — grounds claims like quota, #1, or a raise. */
+  groundingCorpus: string;
 }
 
 function tokenize(text: string): string[] {
@@ -109,6 +147,18 @@ export function buildAllowedFacts(
     .map((c) => c.text.toLowerCase())
     .join(" \n ");
 
+  const groundingCorpus = [
+    profile.headline,
+    profile.about,
+    notes,
+    [...titles].join(" "),
+    [...companies].join(" "),
+    [...schools].join(" "),
+    contextCorpus,
+  ]
+    .join(" \n ")
+    .toLowerCase();
+
   return {
     names: [...names],
     companies: [...companies],
@@ -118,6 +168,7 @@ export function buildAllowedFacts(
     notePhrases,
     whopProofAllowed: allowWhopProof,
     contextCorpus,
+    groundingCorpus,
   };
 }
 
@@ -151,6 +202,40 @@ const CONTEXT_DEPENDENT_PATTERNS = [
   /\b(saw (the )?news|read that|just launched|recently raised)\b/i,
 ];
 
+const SECOND_PERSON = /\b(?:u|ur|urs|you|your|yours)\b/i;
+
+/**
+ * True when the claim is being made about the recipient rather than about Whop —
+ * "u were the #1 rep" is a claim to check, "we hired mercor eng #1" is not. Scoped
+ * per sentence, since that is the unit a claim and its subject share.
+ */
+function claimsAboutRecipient(text: string, pattern: RegExp): boolean {
+  return text
+    .split(/[.!?\n]+/)
+    .some((sentence) => pattern.test(sentence) && SECOND_PERSON.test(sentence));
+}
+
+// Achievements a scrape can never establish on its own. Allowed only when the same
+// claim shows up in the profile, the notes, or verified context.
+const UNVERIFIED_CREDENTIAL_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /(?:\bnumber one\b|#\s?1\b|\btop (?:rep|performer|seller)\b)/i, label: "a #1 / top-performer ranking" },
+  { pattern: /\b(?:quota|president'?s club)\b/i, label: "quota attainment or President's Club" },
+  { pattern: /\b\d+x(?:'?d)?\b/i, label: "a growth multiple" },
+  { pattern: /\b(?:series [a-e]\b|seed round|raised \$)/i, label: "a funding round" },
+];
+
+// Whop selling, in any form. Shape 1 is an observation and a question — none of this belongs.
+const WHOP_PITCH_PATTERNS = [
+  /\b(?:ex-?founders|unicorn(?:'?d)?|1\.6b|300m|mercor|ote|base salary)\b/i,
+  /\b(?:a ton of )?equity\b/i,
+  /\b(?:we(?:'re| are)|we)\s+(?:hiring|scaling|building out)\b/i,
+  /\b(?:hiring for|come build|join (?:us|the team|whop))\b/i,
+  /\bceiling\b/i,
+];
+
+// Shape 1 closes on curiosity about them, not on booking time.
+const CALL_ASK_PATTERNS = [/\bworth a (?:quick )?(?:chat|convo|call)\b/i, /\b(?:down to chat|15 ?min|hop on a call|grab time)\b/i];
+
 export interface DraftValidationResult {
   valid: boolean;
   warnings: string[];
@@ -180,15 +265,27 @@ export function validateDraftSet(
   drafts: DraftSet,
   profile: ProfileData,
   notes: string,
-  opts?: { personaIsFounder?: boolean; founderVariant?: string; context?: ContextFact[] },
+  opts?: {
+    personaIsFounder?: boolean;
+    founderVariant?: string;
+    /** Shape of `drafts.initial`; `drafts.initialAlt` is validated as the other shape. */
+    personalStructure?: PersonalStructure;
+    context?: ContextFact[];
+  },
 ): DraftValidationResult {
   const warnings: string[] = [];
   const errors: string[] = [];
   const context = opts?.context ?? [];
-  const allowed = buildAllowedFacts(profile, notes, opts?.founderVariant === "founder_direct", context);
+  // Personal Shape 2 and the direct Founder variant are the cases that may pitch Whop.
+  const allowWhopProof = !opts?.personaIsFounder || opts.founderVariant === "founder_direct";
+  const allowed = buildAllowedFacts(profile, notes, allowWhopProof, context);
   const hasEnabledContext = context.some((c) => c.enabled && c.text.trim());
+  const persona: OutreachPersona = opts?.personaIsFounder ? "founder" : "personal";
+  const structure = opts?.personalStructure ?? DEFAULT_PERSONAL_STRUCTURE;
 
-  for (const [key, text] of Object.entries(drafts) as [string, string][]) {
+  for (const [key, text] of Object.entries(drafts) as [DraftKey, string | undefined][]) {
+    // initialAlt is optional — an absent alternate is not a missing draft.
+    if (text === undefined && key === "initialAlt") continue;
     if (!text?.trim()) {
       errors.push(`${key} is empty`);
       continue;
@@ -211,11 +308,30 @@ export function validateDraftSet(
       }
     }
 
+    for (const { pattern, label } of UNVERIFIED_CREDENTIAL_PATTERNS) {
+      if (claimsAboutRecipient(text, pattern) && !pattern.test(allowed.groundingCorpus)) {
+        warnings.push(`${key}: claims ${label} that isn't in the profile, notes, or verified context — ask about it instead`);
+      }
+    }
+
+    const range = wordRangeFor(key, { persona, personalStructure: structure });
     const words = countWords(text);
-    if (words < MESSAGE_WORD_MIN || words > MESSAGE_WORD_MAX) {
+    if (words < range.min || words > range.max) {
       warnings.push(
-        `${key}: ${words} words — outside the ${MESSAGE_WORD_MIN}-${MESSAGE_WORD_MAX} word range; trim or expand before sending`,
+        `${key}: ${words} words — outside the ${formatWordRange(range)} word range for this shape; trim or expand before sending`,
       );
+    }
+
+    // Shape 1 is an observation and a question. Anything that sells is the wrong shape.
+    const isInitial = key === "initial" || key === "initialAlt";
+    const shapeForKey = key === "initialAlt" ? otherPersonalStructure(structure) : structure;
+    if (!opts?.personaIsFounder && isInitial && shapeForKey === "personal_obs_only") {
+      if (WHOP_PITCH_PATTERNS.some((p) => p.test(text))) {
+        warnings.push(`${key}: Shape 1 should be observation + question only — drop the Whop pitch or switch it to Shape 2`);
+      }
+      if (CALL_ASK_PATTERNS.some((p) => p.test(text))) {
+        warnings.push(`${key}: Shape 1 should end on a question about them, not an ask for a call`);
+      }
     }
 
     warnings.push(...mentionsUnknownCompany(text, allowed));
@@ -244,12 +360,13 @@ export function parseDraftJson(text: string): DraftSet {
 
   const obj = parsed as Record<string, unknown>;
   const initial = typeof obj.initial === "string" ? obj.initial.trim() : "";
+  const initialAlt = typeof obj.initialAlt === "string" ? obj.initialAlt.trim() : "";
   const followUp1 = typeof obj.followUp1 === "string" ? obj.followUp1.trim() : "";
   const followUp2 = typeof obj.followUp2 === "string" ? obj.followUp2.trim() : "";
 
   if (!initial) throw new Error("Model returned empty initial draft");
 
-  return { initial, followUp1, followUp2 };
+  return initialAlt ? { initial, initialAlt, followUp1, followUp2 } : { initial, followUp1, followUp2 };
 }
 
 export function sanitizeSentText(text: string): string {

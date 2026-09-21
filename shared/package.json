@@ -5,7 +5,7 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node dist-test/test/e2e.js"
+    "test": "tsc -p tsconfig.test.json && node dist-test/test/e2e.js && node dist-test/test/voice.js"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

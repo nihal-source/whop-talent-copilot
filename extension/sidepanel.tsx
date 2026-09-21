@@ -20,12 +20,29 @@ import type {
   DimensionMetrics,
   OutreachEvent,
 } from "@whop-copilot/shared";
-import { mergeProfileWithOverrides, segmentLabel, shortNameFromFirst } from "@whop-copilot/shared";
+import type { PersonalStructure } from "@whop-copilot/shared";
+import {
+  PERSONAL_SHAPES,
+  formatWordRange,
+  mergeProfileWithOverrides,
+  normalizePersonalStructure,
+  otherPersonalStructure,
+  segmentLabel,
+  shortNameFromFirst,
+  wordRangeFor,
+} from "@whop-copilot/shared";
 
 import { IntroPaths } from "./intro-paths";
 import "./sidepanel.css";
 
 type Tab = "sourcing" | "outreach" | "queue" | "pipeline" | "metrics" | "intro";
+
+/** A draft the panel shows; `touch` is absent for the alternate shape, which isn't sent directly. */
+interface DraftCard {
+  key: "initial" | "initialAlt" | "followUp1" | "followUp2";
+  label: string;
+  touch?: TouchType;
+}
 
 const DISCLAIMER_KEY = "tos_disclaimer_accepted";
 
@@ -205,7 +222,7 @@ function IndexSidepanel() {
   const [events, setEvents] = useState<OutreachEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [editDraft, setEditDraft] = useState({ initial: "", followUp1: "", followUp2: "" });
+  const [editDraft, setEditDraft] = useState({ initial: "", initialAlt: "", followUp1: "", followUp2: "" });
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(true);
   const manualRef = useRef(manual);
   const notesRef = useRef(notes);
@@ -391,7 +408,12 @@ function IndexSidepanel() {
         context,
       });
       setDrafts(data.drafts);
-      setEditDraft(data.drafts);
+      setEditDraft({
+        initial: data.drafts.initial,
+        initialAlt: data.drafts.initialAlt ?? "",
+        followUp1: data.drafts.followUp1,
+        followUp2: data.drafts.followUp2,
+      });
       setDraftWarnings(data.validationWarnings ?? []);
       setActiveRecord(data.record);
       setTab("outreach");
@@ -460,6 +482,29 @@ function IndexSidepanel() {
       !["replied", "positive_reply", "closed"].includes(o.status),
   );
 
+  // Drafts are labelled with the shape they were generated as, not the current toggle.
+  const draftPersona = activeRecord?.persona ?? settings?.activePersona ?? "personal";
+  const draftStructure = normalizePersonalStructure(
+    activeRecord?.personalStructure ?? settings?.personalStructure,
+  );
+  const draftCards: DraftCard[] = [
+    {
+      key: "initial",
+      label: draftPersona === "personal" ? `Initial — ${PERSONAL_SHAPES[draftStructure].label}` : "Initial",
+      touch: "initial",
+    },
+    ...(editDraft.initialAlt.trim()
+      ? [
+          {
+            key: "initialAlt" as const,
+            label: `Alternate — ${PERSONAL_SHAPES[otherPersonalStructure(draftStructure)].label}`,
+          },
+        ]
+      : []),
+    { key: "followUp1", label: "Follow-up 1", touch: "follow_up_1" },
+    { key: "followUp2", label: "Follow-up 2", touch: "follow_up_2" },
+  ];
+
   if (!disclaimerAccepted) {
     return (
       <div className="panel">
@@ -518,24 +563,25 @@ function IndexSidepanel() {
       {tab === "sourcing" && (
         <section className="section">
           {settings?.activePersona === "personal" && (
-            <div className="track-toggle">
-              <button
-                className={settings.personalStructure === "personal_full" ? "active" : ""}
-                onClick={() =>
-                  send({ type: "SAVE_SETTINGS", settings: { personalStructure: "personal_full" } }).then(loadSettings)
-                }
-              >
-                Structure A (full)
-              </button>
-              <button
-                className={settings.personalStructure === "personal_obs_only" ? "active" : ""}
-                onClick={() =>
-                  send({ type: "SAVE_SETTINGS", settings: { personalStructure: "personal_obs_only" } }).then(loadSettings)
-                }
-              >
-                Structure B (obs only)
-              </button>
-            </div>
+            <>
+              <div className="track-toggle">
+                {(Object.keys(PERSONAL_SHAPES) as PersonalStructure[]).map((key) => (
+                  <button
+                    key={key}
+                    className={settings.personalStructure === key ? "active" : ""}
+                    onClick={() =>
+                      send({ type: "SAVE_SETTINGS", settings: { personalStructure: key } }).then(loadSettings)
+                    }
+                  >
+                    {PERSONAL_SHAPES[key].shortLabel}
+                  </button>
+                ))}
+              </div>
+              <p className="muted">
+                {PERSONAL_SHAPES[settings.personalStructure].recipe} Both shapes are drafted — this
+                picks the primary.
+              </p>
+            </>
           )}
           <div className="track-toggle">
             <button className={track === "gtm" ? "active" : ""} onClick={() => setTrack("gtm")}>
@@ -708,27 +754,22 @@ function IndexSidepanel() {
               </ul>
             </div>
           )}
-          {(["initial", "followUp1", "followUp2"] as const).map((key, i) => {
-            const touch: TouchType = i === 0 ? "initial" : i === 1 ? "follow_up_1" : "follow_up_2";
-            const label = i === 0 ? "Initial" : `Follow-up ${i}`;
+          {draftCards.map(({ key, label, touch }) => {
+            const range = wordRangeFor(key, { persona: draftPersona, personalStructure: draftStructure });
+            const words = editDraft[key].trim().split(/\s+/).filter(Boolean).length;
+            const inRange = words >= range.min && words <= range.max;
             return (
               <div key={key} className="card">
                 <div className="card-title">
                   {label}
-                  {(() => {
-                    const words = editDraft[key].trim().split(/\s+/).filter(Boolean).length;
-                    const inRange = words >= 50 && words <= 70;
-                    return (
-                      <span className={inRange ? "wordcount ok" : "wordcount off"}>
-                        {words}w {inRange ? "✓" : "(aim 50–70)"}
-                      </span>
-                    );
-                  })()}
+                  <span className={inRange ? "wordcount ok" : "wordcount off"}>
+                    {words}w {inRange ? "✓" : `(aim ${formatWordRange(range)})`}
+                  </span>
                 </div>
                 <textarea
                   value={editDraft[key]}
                   onChange={(e) => setEditDraft({ ...editDraft, [key]: e.target.value })}
-                  rows={6}
+                  rows={5}
                 />
                 <div className="actions">
                   <button className="btn secondary" onClick={() => navigator.clipboard.writeText(editDraft[key])}>
@@ -737,9 +778,21 @@ function IndexSidepanel() {
                   <button className="btn secondary" onClick={() => insertDraft(editDraft[key])}>
                     Insert into LinkedIn
                   </button>
-                  <button className="btn primary" onClick={() => markSent(touch)} disabled={!editDraft[key].trim()}>
-                    Mark sent
-                  </button>
+                  {touch ? (
+                    <button className="btn primary" onClick={() => markSent(touch)} disabled={!editDraft[key].trim()}>
+                      Mark sent
+                    </button>
+                  ) : (
+                    <button
+                      className="btn primary"
+                      onClick={() =>
+                        setEditDraft({ ...editDraft, initial: editDraft.initialAlt, initialAlt: editDraft.initial })
+                      }
+                      disabled={!editDraft.initialAlt.trim()}
+                    >
+                      Swap into Initial
+                    </button>
+                  )}
                 </div>
               </div>
             );
