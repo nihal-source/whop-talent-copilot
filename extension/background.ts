@@ -54,6 +54,9 @@ async function getSettings(): Promise<AppSettings> {
   const merged = { ...DEFAULT_SETTINGS, ...stored };
   // Settings saved before the two-shape rewrite carry the retired "personal_full".
   merged.personalStructure = normalizePersonalStructure(merged.personalStructure);
+  // The framework version describes the prompts, not a user preference — pinning it to
+  // whatever was in storage would log new-voice sends under the old version.
+  merged.frameworkVersion = DEFAULT_SETTINGS.frameworkVersion;
   return merged;
 }
 
