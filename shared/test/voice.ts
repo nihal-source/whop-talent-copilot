@@ -113,6 +113,18 @@ assert(
   "A value prop in Shape 2 is not flagged as a wrong shape",
 );
 
+// --- A Whop proof point is not mistaken for an unverifiable claim about them ---
+const proofPoint: DraftSet = {
+  initial:
+    "yoo kasyap noticed u have been on briefs infra since u joined. we hired mercor eng #1 onto that same kind of work at whop. curious what ur building there?",
+  ...followUps,
+};
+const proofResult = validateDraftSet(proofPoint, profile, "", { personalStructure: "personal_obs_value" });
+assert(
+  !proofResult.warnings.some((w) => w.includes("#1 / top-performer")),
+  `Citing "mercor eng #1" in Shape 2 is not flagged as an invented ranking (got: ${proofResult.warnings.join(" | ")})`,
+);
+
 // --- Unverifiable credentials are flagged unless the inputs back them up ---
 const invented: DraftSet = {
   initial: "yoo kasyap heard u were the #1 rep on ur team and crushed quota last year. how did u pull that off at brief?",

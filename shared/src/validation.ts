@@ -202,6 +202,19 @@ const CONTEXT_DEPENDENT_PATTERNS = [
   /\b(saw (the )?news|read that|just launched|recently raised)\b/i,
 ];
 
+const SECOND_PERSON = /\b(?:u|ur|urs|you|your|yours)\b/i;
+
+/**
+ * True when the claim is being made about the recipient rather than about Whop —
+ * "u were the #1 rep" is a claim to check, "we hired mercor eng #1" is not. Scoped
+ * per sentence, since that is the unit a claim and its subject share.
+ */
+function claimsAboutRecipient(text: string, pattern: RegExp): boolean {
+  return text
+    .split(/[.!?\n]+/)
+    .some((sentence) => pattern.test(sentence) && SECOND_PERSON.test(sentence));
+}
+
 // Achievements a scrape can never establish on its own. Allowed only when the same
 // claim shows up in the profile, the notes, or verified context.
 const UNVERIFIED_CREDENTIAL_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
@@ -263,7 +276,9 @@ export function validateDraftSet(
   const warnings: string[] = [];
   const errors: string[] = [];
   const context = opts?.context ?? [];
-  const allowed = buildAllowedFacts(profile, notes, opts?.founderVariant === "founder_direct", context);
+  // Personal Shape 2 and the direct Founder variant are the cases that may pitch Whop.
+  const allowWhopProof = !opts?.personaIsFounder || opts.founderVariant === "founder_direct";
+  const allowed = buildAllowedFacts(profile, notes, allowWhopProof, context);
   const hasEnabledContext = context.some((c) => c.enabled && c.text.trim());
   const persona: OutreachPersona = opts?.personaIsFounder ? "founder" : "personal";
   const structure = opts?.personalStructure ?? DEFAULT_PERSONAL_STRUCTURE;
@@ -294,7 +309,7 @@ export function validateDraftSet(
     }
 
     for (const { pattern, label } of UNVERIFIED_CREDENTIAL_PATTERNS) {
-      if (pattern.test(text) && !pattern.test(allowed.groundingCorpus)) {
+      if (claimsAboutRecipient(text, pattern) && !pattern.test(allowed.groundingCorpus)) {
         warnings.push(`${key}: claims ${label} that isn't in the profile, notes, or verified context — ask about it instead`);
       }
     }
