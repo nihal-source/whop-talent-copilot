@@ -1,7 +1,14 @@
 export type TalentTrack = "gtm" | "engineering";
 export type OutreachPersona = "personal" | "founder";
 export type FounderVariant = "founder_cracked" | "founder_subtle_career" | "founder_subtle_lit" | "founder_direct";
-export type PersonalStructure = "personal_full" | "personal_obs_only";
+/**
+ * The only two shapes an initial Personal message may take.
+ * - personal_obs_only  (Shape 1): concrete observation -> question. No Whop pitch.
+ * - personal_obs_value (Shape 2): observation -> one-line value prop -> question.
+ */
+export type PersonalStructure = "personal_obs_only" | "personal_obs_value";
+/** Profile-data providers. "none" means DOM-scrape the open LinkedIn tab. */
+export type EnrichmentProvider = "none" | "apify" | "pdl" | "crustdata";
 export type FitTier = "strong" | "good" | "weak" | "disqualified";
 export type TouchType = "initial" | "follow_up_1" | "follow_up_2" | "follow_up_n" | "objection_handle";
 export type OutreachStatus =
@@ -104,7 +111,8 @@ export interface PersonaConfig {
   styleGuide: { tone: string; length: string; mustInclude: string[]; mustAvoid: string[] };
   framework: MessageFramework;
   senderContext: { name: string; title: string; company: string; pitchLine?: string };
-  examples: { initial: string; followUp1: string; followUp2?: string };
+  /** `initial` is the Shape 1 example; `initialWithValueProp` is the Shape 2 example. */
+  examples: { initial: string; initialWithValueProp?: string; followUp1: string; followUp2?: string };
   followUpCadenceDays: [number, number];
 }
 
@@ -123,6 +131,8 @@ export interface TalentBarConfig {
 
 export interface DraftSet {
   initial: string;
+  /** The other allowed initial shape, so the recruiter can pick between them. */
+  initialAlt?: string;
   followUp1: string;
   followUp2: string;
 }
@@ -232,8 +242,10 @@ export interface ContextFact {
 
 export interface AppSettings {
   anthropicApiKey: string;
-  enrichmentProvider: "none" | "apify";
+  enrichmentProvider: EnrichmentProvider;
+  /** Token for the selected provider (Apify token / People Data Labs key). */
   enrichmentApiToken: string;
+  crustdataApiKey: string;
   contextProvider: "none" | "tavily";
   contextApiToken: string;
   activePersona: OutreachPersona;
